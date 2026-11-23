@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>길드 보스 출석 및 분배 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK (Compat 버전으로 단일 HTML에서 즉시 실행 가능) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
@@ -173,7 +174,6 @@
                 <h3 class="text-lg font-bold text-cyan-400 mb-1">3. 유저별 출석 기록 수동 추가 / 삭제 (시간 무관)</h3>
                 <p class="text-xs text-slate-400 mb-4">출석 시간이 지났더라도 관리자는 특정 유저의 참여 내역을 직접 추가하거나 잘못된 기록을 삭제할 수 있습니다.</p>
                 
-                <!-- 수동 추가 폼 -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6 bg-slate-900 p-4 rounded-lg">
                     <div>
                         <label class="block text-xs text-slate-400 mb-1">대상 유저</label>
@@ -196,7 +196,6 @@
                     </div>
                 </div>
 
-                <!-- 현재 Cycle 전체 출석 로그 (개별 삭제 가능) -->
                 <h4 class="text-sm font-semibold text-slate-300 mb-2">현재 Cycle 출석 상세 로그 (최신순)</h4>
                 <div class="max-h-64 overflow-y-auto border border-slate-700 rounded-lg">
                     <table class="w-full text-left text-xs">
@@ -294,11 +293,22 @@
 
 <script>
     // =========================================================================
-    // [필수 설정] Firebase 콘솔에서 복사한 본인의 databaseURL을 아래에 입력하세요!
+    // [필수 설정] Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹)에서 복사한
+    // 전체 firebaseConfig 값으로 교체하세요.
     // =========================================================================
     const firebaseConfig = {
-        databaseURL: "https://checksheet-67ac7-default-rtdb.asia-southeast1.firebasedatabase.app"
+        apiKey: "AIzaSyAqgiTj_cO4zg6VUJ6sqOUuzFwZ1ScJjeg",
+        authDomain: "checksheet-67ac7.firebaseapp.com",
+        databaseURL: "ttps://checksheet-67ac7-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "checksheet-67ac7",
+        storageBucket: "checksheet-67ac7.firebasestorage.app",
+        messagingSenderId: "341345984079",
+        appId: "1:341345984079:web:f5d12c860fd3f9d6d0d43a"
     };
+
+    if (!firebaseConfig.databaseURL || firebaseConfig.databaseURL.includes("YOUR_PROJECT_ID")) {
+        console.warn("Firebase 설정(firebaseConfig)이 아직 입력되지 않았습니다.");
+    }
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
@@ -337,7 +347,6 @@
         return Number(mults.HH ?? 1.0);
     }
 
-    // datetime-local 입력용 포맷 변환 헬퍼
     function toLocalDatetimeInputString(date) {
         const pad = (n) => String(n).padStart(2, '0');
         return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -400,7 +409,6 @@
             document.getElementById('tab-admin').classList.add('hidden');
         }
 
-        // 5초마다 출석 시간 만료 여부를 실시간 갱신
         if (timeCheckInterval) clearInterval(timeCheckInterval);
         timeCheckInterval = setInterval(() => {
             if (currentUser) renderActiveEvent();
@@ -443,7 +451,6 @@
         }
     }
 
-    // 현재 진행 중인 출석 이벤트 및 지정 시간 체크
     function renderActiveEvent() {
         const infoEl = document.getElementById('active-event-info');
         const timeEl = document.getElementById('active-event-time');
@@ -482,7 +489,6 @@
         }
     }
 
-    // 유저 원클릭 출석 제출 (지정 시간 검증 포함)
     function submitAttendance() {
         const ev = appData.activeEvent;
         if (!ev) return alert("진행 중인 출석 이벤트가 없습니다.");
@@ -515,7 +521,6 @@
         });
     }
 
-    // 대시보드 순위 및 분배금 계산 렌더링
     function renderDashboard() {
         document.getElementById('current-cycle-label').innerText = `Cycle #${appData.currentCycle}`;
         const tbody = document.getElementById('scoreboard-body');
@@ -588,7 +593,6 @@
         document.getElementById('cfg-mult-LH_HL').value = mults.LH_HL ?? mults.LH ?? mults.HL ?? 1.2;
         document.getElementById('cfg-mult-HH').value = mults.HH ?? 1.0;
 
-        // 수동 출석 추가용 유저 드롭다운 갱신
         const manualSelect = document.getElementById('manual-user-select');
         const prevSelected = manualSelect.value;
         manualSelect.innerHTML = '';
@@ -600,7 +604,6 @@
         });
         if (prevSelected && appData.users[prevSelected]) manualSelect.value = prevSelected;
 
-        // 현재 Cycle 상세 출석 로그 렌더링 (개별 삭제용)
         const logsListEl = document.getElementById('admin-logs-list');
         logsListEl.innerHTML = '';
         const flatLogs = [];
@@ -631,7 +634,6 @@
             });
         }
 
-        // 유저 목록 렌더링
         const userListEl = document.getElementById('admin-user-list');
         userListEl.innerHTML = '';
 
@@ -686,7 +688,6 @@
         });
     }
 
-    // 관리자 전용: 시간 무관 유저 출석 수동 추가
     function manualAddAttendance() {
         const uid = document.getElementById('manual-user-select').value;
         const type = document.getElementById('manual-event-type').value;
@@ -712,7 +713,6 @@
         });
     }
 
-    // 관리자 전용: 특정 유저의 출석 기록 삭제
     function deleteAttendanceLog(evId, uid) {
         if (confirm(`[${uid}] 유저의 해당 출석 기록을 삭제하시겠습니까?\n삭제 시 누적 점수에서 즉시 차감됩니다.`)) {
             db.ref(`logs/${evId}/${uid}`).remove();
