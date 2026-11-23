@@ -121,10 +121,10 @@
                 <div class="lg:col-span-2 card p-6 border-l-4 border-l-emerald-500">
                     <div class="mb-4">
                         <h3 class="text-lg font-bold text-emerald-400">1. 콘텐츠별 고정 출석 시간 추가 (항목당 최대 10개)</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">매일 또는 특정 요일과 시작~마감 시각을 지정하면 해당 시간마다 자동으로 출석이 열립니다.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">매일 또는 원하는 요일(복수 선택 가능)과 시작~마감 시각을 지정하면 해당 시간마다 자동으로 출석이 열립니다.</p>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-3">
                         <div>
                             <label class="block text-xs text-slate-400 mb-1">콘텐츠 종류</label>
                             <select id="slot-type" onchange="renderSlotLists()" class="w-full input-dark text-sm">
@@ -134,25 +134,54 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs text-slate-400 mb-1">반복 요일</label>
-                            <select id="slot-day" class="w-full input-dark text-sm">
-                                <option value="ALL">매일</option>
-                                <option value="1">월요일</option>
-                                <option value="2">화요일</option>
-                                <option value="3">수요일</option>
-                                <option value="4">목요일</option>
-                                <option value="5">금요일</option>
-                                <option value="6">토요일</option>
-                                <option value="0">일요일</option>
-                            </select>
-                        </div>
-                        <div>
                             <label class="block text-xs text-slate-400 mb-1">인정 횟수</label>
                             <input type="number" id="slot-count" value="1" min="1" class="w-full input-dark text-sm">
                         </div>
                         <div>
                             <label class="block text-xs text-slate-400 mb-1">시간대 이름 (선택)</label>
                             <input type="text" id="slot-title" class="w-full input-dark text-sm" placeholder="예: 저녁 보탐">
+                        </div>
+                    </div>
+
+                    <!-- 요일 선택 영역 (매일 또는 개별 요일 복수 선택) -->
+                    <div class="bg-slate-900/90 border border-slate-700 rounded-lg p-3 mb-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <span class="text-xs font-semibold text-slate-300">출석 요일 선택</span>
+                            <button type="button" onclick="toggleAllDays()" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-600 transition">매일 전체선택/해제</button>
+                        </div>
+                        <div class="flex flex-wrap gap-2" id="day-checkbox-group">
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-800 border border-slate-600 cursor-pointer text-xs select-none">
+                                <input type="checkbox" class="slot-day-cb accent-emerald-500" value="1" onchange="syncEverydayCheckbox()">
+                                <span>월</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-800 border border-slate-600 cursor-pointer text-xs select-none">
+                                <input type="checkbox" class="slot-day-cb accent-emerald-500" value="2" onchange="syncEverydayCheckbox()">
+                                <span>화</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-800 border border-slate-600 cursor-pointer text-xs select-none">
+                                <input type="checkbox" class="slot-day-cb accent-emerald-500" value="3" onchange="syncEverydayCheckbox()">
+                                <span>수</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-800 border border-slate-600 cursor-pointer text-xs select-none">
+                                <input type="checkbox" class="slot-day-cb accent-emerald-500" value="4" onchange="syncEverydayCheckbox()">
+                                <span>목</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-800 border border-slate-600 cursor-pointer text-xs select-none">
+                                <input type="checkbox" class="slot-day-cb accent-emerald-500" value="5" onchange="syncEverydayCheckbox()">
+                                <span>금</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-800 border border-slate-600 cursor-pointer text-xs select-none">
+                                <input type="checkbox" class="slot-day-cb accent-emerald-500" value="6" onchange="syncEverydayCheckbox()">
+                                <span>토</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-800 border border-slate-600 cursor-pointer text-xs select-none">
+                                <input type="checkbox" class="slot-day-cb accent-emerald-500" value="0" onchange="syncEverydayCheckbox()">
+                                <span>일</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-amber-500/10 border border-amber-500/40 cursor-pointer text-xs text-amber-300 select-none">
+                                <input type="checkbox" id="slot-day-all" class="accent-amber-400" onchange="toggleEverydayCheckbox()">
+                                <span>매일</span>
+                            </label>
                         </div>
                     </div>
 
@@ -387,8 +416,17 @@
         war: "단체전투"
     };
 
-    const dayLabels = {
-        ALL: "매일",
+    const shortDayLabels = {
+        0: "일",
+        1: "월",
+        2: "화",
+        3: "수",
+        4: "목",
+        5: "금",
+        6: "토"
+    };
+
+    const fullDayLabels = {
         0: "일요일",
         1: "월요일",
         2: "화요일",
@@ -399,7 +437,6 @@
     };
 
     const dayOrder = {
-        ALL: -1,
         1: 0,
         2: 1,
         3: 2,
@@ -435,6 +472,56 @@
         return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
+    // 슬롯에서 요일 배열 추출 (days 배열 및 구버전 day 필드 호환)
+    function normalizeSlotDays(slot) {
+        if (Array.isArray(slot.days) && slot.days.length > 0) {
+            return slot.days.map(String);
+        }
+        if (slot.day !== undefined && slot.day !== null) {
+            if (String(slot.day) === 'ALL') return ['1', '2', '3', '4', '5', '6', '0'];
+            return [String(slot.day)];
+        }
+        return ['1', '2', '3', '4', '5', '6', '0'];
+    }
+
+    function formatSlotDaysLabel(slot) {
+        const days = normalizeSlotDays(slot);
+        if (days.length === 7) return "매일";
+        return days
+            .slice()
+            .sort((a, b) => (dayOrder[a] ?? 99) - (dayOrder[b] ?? 99))
+            .map(d => shortDayLabels[d] ?? d)
+            .join(", ");
+    }
+
+    // 요일 체크박스 도우미
+    function toggleEverydayCheckbox() {
+        const allChecked = document.getElementById('slot-day-all').checked;
+        document.querySelectorAll('.slot-day-cb').forEach(cb => {
+            cb.checked = allChecked;
+        });
+    }
+
+    function syncEverydayCheckbox() {
+        const cbs = Array.from(document.querySelectorAll('.slot-day-cb'));
+        document.getElementById('slot-day-all').checked = cbs.every(cb => cb.checked);
+    }
+
+    function toggleAllDays() {
+        const cbs = Array.from(document.querySelectorAll('.slot-day-cb'));
+        const anyUnchecked = cbs.some(cb => !cb.checked);
+        cbs.forEach(cb => { cb.checked = anyUnchecked; });
+        document.getElementById('slot-day-all').checked = anyUnchecked;
+    }
+
+    function getSelectedDaysFromUI() {
+        const allCb = document.getElementById('slot-day-all');
+        if (allCb && allCb.checked) {
+            return ['1', '2', '3', '4', '5', '6', '0'];
+        }
+        return Array.from(document.querySelectorAll('.slot-day-cb:checked')).map(cb => String(cb.value));
+    }
+
     // 현재 시각 기준으로 슬롯이 열려 있는지 판별 (자정 넘김 시간대 포함)
     function evaluateSlotOpenState(slot, nowDate = new Date()) {
         const startMin = parseTimeToMinutes(slot.startTime);
@@ -442,11 +529,12 @@
         if (startMin === null || endMin === null) return { isOpen: false, occurrenceDateKey: getDateKey(nowDate) };
 
         const curMin = nowDate.getHours() * 60 + nowDate.getMinutes();
-        const curDay = nowDate.getDay();
+        const curDay = String(nowDate.getDay());
+        const allowedDays = normalizeSlotDays(slot);
 
         // 같은 날 내 시간대 (예: 21:00 ~ 21:30)
         if (startMin <= endMin) {
-            const dayMatches = (slot.day === 'ALL') || (String(slot.day) === String(curDay));
+            const dayMatches = allowedDays.includes(curDay);
             const timeMatches = (curMin >= startMin) && (curMin <= endMin);
             return {
                 isOpen: dayMatches && timeMatches,
@@ -456,7 +544,7 @@
 
         // 자정을 넘기는 시간대 (예: 23:30 ~ 00:30)
         if (curMin >= startMin) {
-            const dayMatches = (slot.day === 'ALL') || (String(slot.day) === String(curDay));
+            const dayMatches = allowedDays.includes(curDay);
             return {
                 isOpen: dayMatches,
                 occurrenceDateKey: getDateKey(nowDate)
@@ -465,8 +553,8 @@
 
         if (curMin <= endMin) {
             const yesterday = new Date(nowDate.getTime() - 24 * 60 * 60 * 1000);
-            const yesterdayDay = yesterday.getDay();
-            const dayMatches = (slot.day === 'ALL') || (String(slot.day) === String(yesterdayDay));
+            const yesterdayDay = String(yesterday.getDay());
+            const dayMatches = allowedDays.includes(yesterdayDay);
             return {
                 isOpen: dayMatches,
                 occurrenceDateKey: getDateKey(yesterday)
@@ -578,7 +666,7 @@
         const clockBadge = document.getElementById('current-clock-badge');
         const nowDate = new Date();
         const pad = (n) => String(n).padStart(2, '0');
-        clockBadge.innerText = `현재 시각: ${dayLabels[nowDate.getDay()]} ${pad(nowDate.getHours())}:${pad(nowDate.getMinutes())}:${pad(nowDate.getSeconds())}`;
+        clockBadge.innerText = `현재 시각: ${fullDayLabels[nowDate.getDay()]} ${pad(nowDate.getHours())}:${pad(nowDate.getMinutes())}:${pad(nowDate.getSeconds())}`;
 
         const openSlots = [];
 
@@ -603,7 +691,7 @@
         container.innerHTML = '';
         openSlots.forEach(slot => {
             const alreadyChecked = appData.logs && appData.logs[slot.logKey] && appData.logs[slot.logKey][currentUser.id];
-            const dayName = dayLabels[slot.day] ?? '매일';
+            const daysText = formatSlotDaysLabel(slot);
             const labelText = slot.title ? `${eventTypeLabels[slot.type]} - ${slot.title}` : eventTypeLabels[slot.type];
 
             const row = document.createElement('div');
@@ -615,7 +703,7 @@
                         <span class="font-bold text-white">${labelText}</span>
                         <span class="text-xs text-amber-300">(${slot.count}회 인정)</span>
                     </div>
-                    <p class="text-xs text-slate-400 mt-1">🗓️ ${dayName} · ⏰ ${slot.startTime} ~ ${slot.endTime}</p>
+                    <p class="text-xs text-slate-400 mt-1">🗓️ ${daysText} · ⏰ ${slot.startTime} ~ ${slot.endTime}</p>
                 </div>
                 <button
                     onclick="submitSlotAttendance('${slot.type}', '${slot.slotId}')"
@@ -640,7 +728,7 @@
         const nowDate = new Date();
         const state = evaluateSlotOpenState(slot, nowDate);
         if (!state.isOpen) {
-            return alert(`현재는 출석 가능 시간이 아닙니다.\n설정 시간: ${dayLabels[slot.day] ?? '매일'} ${slot.startTime} ~ ${slot.endTime}`);
+            return alert(`현재는 출석 가능 시간이 아닙니다.\n설정 시간: ${formatSlotDaysLabel(slot)} ${slot.startTime} ~ ${slot.endTime}`);
         }
 
         const logKey = `${slotId}_${state.occurrenceDateKey}`;
@@ -711,7 +799,7 @@
     // =========================================================================
     function addScheduleSlot() {
         const type = document.getElementById('slot-type').value;
-        const day = document.getElementById('slot-day').value;
+        const selectedDays = getSelectedDaysFromUI();
         const count = Number(document.getElementById('slot-count').value) || 1;
         const title = document.getElementById('slot-title').value.trim();
         const startTime = document.getElementById('slot-start-time').value;
@@ -722,6 +810,9 @@
             return alert(`${eventTypeLabels[type]} 항목은 최대 ${MAX_SLOTS_PER_TYPE}개까지만 추가할 수 있습니다.\n기존 시간대를 삭제한 뒤 추가해주세요.`);
         }
 
+        if (selectedDays.length === 0) {
+            return alert("출석할 요일을 최소 1개 이상 선택하세요.");
+        }
         if (!startTime || !endTime) {
             return alert("시작 시간과 마감 시간을 모두 입력하세요.");
         }
@@ -731,7 +822,7 @@
 
         const slotId = `slot_${type}_${Date.now()}`;
         db.ref(`schedules/${type}/${slotId}`).set({
-            day,
+            days: selectedDays,
             title,
             count,
             startTime,
@@ -739,7 +830,8 @@
             createdAt: Date.now()
         }).then(() => {
             document.getElementById('slot-title').value = '';
-            alert(`${eventTypeLabels[type]} 고정 출석 시간(${dayLabels[day]} ${startTime}~${endTime})이 추가되었습니다.`);
+            const label = selectedDays.length === 7 ? '매일' : selectedDays.map(d => shortDayLabels[d]).join(',');
+            alert(`${eventTypeLabels[type]} 고정 출석 시간(${label} ${startTime}~${endTime})이 추가되었습니다.`);
         });
     }
 
@@ -755,11 +847,7 @@
             const badgeEl = document.getElementById(`count-badge-${type}`);
             const entries = Object.entries(appData.schedules[type] || {})
                 .map(([id, data]) => ({ id, ...data }))
-                .sort((a, b) => {
-                    const dayDiff = (dayOrder[a.day] ?? 99) - (dayOrder[b.day] ?? 99);
-                    if (dayDiff !== 0) return dayDiff;
-                    return (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0);
-                });
+                .sort((a, b) => (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0));
 
             badgeEl.innerText = `${entries.length} / ${MAX_SLOTS_PER_TYPE}`;
             listEl.innerHTML = '';
@@ -770,12 +858,12 @@
             }
 
             entries.forEach((s, idx) => {
-                const dayName = dayLabels[s.day] ?? '매일';
+                const daysText = formatSlotDaysLabel(s);
                 const div = document.createElement('div');
                 div.className = "bg-slate-800/90 border border-slate-700 rounded p-2 flex justify-between items-start gap-2";
                 div.innerHTML = `
                     <div>
-                        <div class="font-semibold text-slate-200">#${idx + 1} [${dayName}] ${s.title ? s.title : eventTypeLabels[type]} <span class="text-amber-400">(${s.count}회)</span></div>
+                        <div class="font-semibold text-slate-200">#${idx + 1} [${daysText}] ${s.title ? s.title : eventTypeLabels[type]} <span class="text-amber-400">(${s.count}회)</span></div>
                         <div class="text-slate-400 mt-0.5">${s.startTime} ~ ${s.endTime}</div>
                     </div>
                     <button onclick="deleteScheduleSlot('${type}', '${s.id}')" class="text-rose-400 hover:text-rose-300 font-bold px-1.5">✕</button>
