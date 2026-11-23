@@ -238,6 +238,15 @@
                 </div>
             </div>
 
+            <!-- 과거 Cycle 기록 삭제 관리 -->
+            <div class="card p-6 border-l-4 border-l-rose-500">
+                <h3 class="text-lg font-bold text-rose-400 mb-1">과거 Cycle 기록 삭제</h3>
+                <p class="text-xs text-slate-400 mb-4">과거 Cycle 기록을 삭제하면 남은 기록 기준으로 현재 Cycle 번호가 자동으로 재조정됩니다. (예: Cycle #1 삭제 시 현재 Cycle #2 → #1로 변경)</p>
+                <div id="admin-history-list" class="space-y-2 text-sm">
+                    <p class="text-slate-500 text-xs py-3 text-center bg-slate-900/60 rounded-lg">저장된 과거 Cycle 기록이 없습니다.</p>
+                </div>
+            </div>
+
             <!-- 2. 관리자 수동 출석 추가 / 삭제 (시간 무관) -->
             <div class="card p-6 border-l-4 border-l-cyan-500">
                 <h3 class="text-lg font-bold text-cyan-400 mb-1">3. 유저별 출석 기록 수동 추가 / 삭제 (시간 무관)</h3>
@@ -375,7 +384,6 @@
         appId: "1:341345984079:web:f5d12c860fd3f9d6d0d43a"
     };
 
-
     if (!firebaseConfig.databaseURL || firebaseConfig.databaseURL.includes("YOUR_PROJECT_ID")) {
         console.warn("Firebase 설정(firebaseConfig)이 아직 입력되지 않았습니다.");
     }
@@ -454,7 +462,6 @@
         return Number(mults.HH ?? 1.0);
     }
 
-    // HH:MM 문자열을 자정 기준 초(0 ~ 86399)로 변환
     function parseTimeToSeconds(timeStr) {
         if (!timeStr || !timeStr.includes(':')) return null;
         const [h, m] = timeStr.split(':').map(Number);
@@ -522,8 +529,6 @@
         return Array.from(document.querySelectorAll('.slot-day-cb:checked')).map(cb => String(cb.value));
     }
 
-    // 현재 시각(초 단위) 기준으로 슬롯이 열려 있는지 판별
-    // 마감 시각(예: 21:30 -> 21:30:00)이 지나면 즉시 isOpen = false
     function evaluateSlotOpenState(slot, nowDate = new Date()) {
         const startSec = parseTimeToSeconds(slot.startTime);
         const endSec = parseTimeToSeconds(slot.endTime);
@@ -535,7 +540,6 @@
         const curDay = String(nowDate.getDay());
         const allowedDays = normalizeSlotDays(slot);
 
-        // 같은 날 내 시간대 (예: 21:00:00 ~ 21:30:00)
         if (startSec <= endSec) {
             const dayMatches = allowedDays.includes(curDay);
             if (!dayMatches) {
@@ -550,7 +554,6 @@
             return { isOpen: true, reason: 'open', occurrenceDateKey: getDateKey(nowDate) };
         }
 
-        // 자정을 넘기는 시간대 (예: 23:30:00 ~ 00:30:00)
         if (curSec >= startSec) {
             const dayMatches = allowedDays.includes(curDay);
             return {
@@ -670,7 +673,6 @@
         }
     }
 
-    // 현재 요일/시각에 맞춰 출석 가능한 슬롯만 표시 (종료 시각 경과 시 즉시 제외)
     function renderActiveSlots() {
         const container = document.getElementById('active-slots-container');
         const clockBadge = document.getElementById('current-clock-badge');
@@ -731,11 +733,9 @@
         });
     }
 
-    // 출석 제출 시 마감 시간을 실시간 재검증하여 종료 시각 이후 클릭 차단
     function submitSlotAttendance(type, slotId) {
         if (isSubmittingAttendance) return;
 
-        // 최신 스케줄 및 현재 시각 즉시 재확인
         renderActiveSlots();
 
         const slot = (appData.schedules[type] && appData.schedules[type][slotId]) || null;
@@ -765,7 +765,6 @@
 
         isSubmittingAttendance = true;
 
-        // 제출 직전 한 번 더 마감 시각 경과 여부 확인
         const doubleCheck = evaluateSlotOpenState(slot, new Date());
         if (!doubleCheck.isOpen) {
             isSubmittingAttendance = false;
@@ -910,8 +909,62 @@
         });
     }
 
+    function renderAdminHistoryList() {
+        const container = document.getElementById('admin-history-list');
+        if (!container) return;
+
+        const entries = Object.entries(appData.history || {})
+            .map(([key, data]) => {
+                const parsedNum = Number(data?.cycleNumber) || Number(String(key).replace(/^cycle_/, '')) || 0;
+                return { key, cycleNumber: parsedNum, endedAt: data?.endedAt || '-' };
+            })
+            .sort((a, b) => a.cycleNumber - b.cycleNumber);
+
+        if (entries.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 text-xs py-3 text-center bg-slate-900/60 rounded-lg">저장된 과거 Cycle 기록이 없습니다.</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        entries.forEach(item => {
+            const row = document.createElement('div');
+            row.className = "flex justify-between items-center bg-slate-900/90 border border-slate-700 rounded-lg px-4 py-2.5";
+            row.innerHTML = `
+                <div>
+                    <span class="font-bold text-amber-300">Cycle #${item.cycleNumber}</span>
+                    <span class="text-xs text-slate-400 ml-2">(종료일: ${item.endedAt})</span>
+                </div>
+                <button onclick="deleteHistoryCycle('${item.key}', ${item.cycleNumber})" class="px-3 py-1 bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-semibold rounded transition">삭제</button>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    function deleteHistoryCycle(cycleKey, cycleNum) {
+        if (!confirm(`과거 Cycle #${cycleNum} 기록을 삭제하시겠습니까?\n남아 있는 기록 기준으로 현재 Cycle 번호가 자동 조정됩니다.`)) return;
+
+        const remainingHistory = { ...(appData.history || {}) };
+        delete remainingHistory[cycleKey];
+
+        const maxRemainingCycle = Object.entries(remainingHistory).reduce((maxVal, [k, val]) => {
+            const num = Number(val?.cycleNumber) || Number(String(k).replace(/^cycle_/, '')) || 0;
+            return Math.max(maxVal, num);
+        }, 0);
+
+        const nextCurrentCycle = maxRemainingCycle + 1;
+
+        const updates = {};
+        updates[`history/${cycleKey}`] = null;
+        updates['currentCycle'] = nextCurrentCycle;
+
+        db.ref().update(updates).then(() => {
+            alert(`Cycle #${cycleNum} 기록이 삭제되었으며, 현재 Cycle이 #${nextCurrentCycle}로 변경되었습니다.`);
+        });
+    }
+
     function renderAdminPanel() {
         renderSlotLists();
+        renderAdminHistoryList();
 
         document.getElementById('cfg-score-field').value = appData.settings.scores.field;
         document.getElementById('cfg-score-world').value = appData.settings.scores.world;
@@ -1103,13 +1156,20 @@
         const currentVal = select.value;
         select.innerHTML = '<option value="">과거 기록 선택</option>';
 
-        Object.entries(appData.history).forEach(([key, data]) => {
+        const sortedHistory = Object.entries(appData.history || {})
+            .map(([key, data]) => {
+                const num = Number(data?.cycleNumber) || Number(String(key).replace(/^cycle_/, '')) || 0;
+                return { key, data, num };
+            })
+            .sort((a, b) => a.num - b.num);
+
+        sortedHistory.forEach(({ key, data }) => {
             const opt = document.createElement('option');
             opt.value = key;
             opt.innerText = `Cycle #${data.cycleNumber} (종료일: ${data.endedAt})`;
             select.appendChild(opt);
         });
-        select.value = currentVal;
+        select.value = appData.history[currentVal] ? currentVal : '';
     }
 
     function renderHistory() {
