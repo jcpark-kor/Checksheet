@@ -455,6 +455,10 @@
         0: 6
     };
 
+    function isAdminUser() {
+        return Boolean(currentUser && currentUser.role === 'admin');
+    }
+
     function getGradeMultiplier(grade) {
         const mults = appData.settings.multipliers || {};
         if (grade === 'LL') return Number(mults.LL ?? 1.3);
@@ -631,6 +635,9 @@
             document.getElementById('tab-admin').classList.add('hidden');
         }
 
+        // 로그인 시 항상 기본 출석 탭으로 시작
+        switchTab('attendance');
+
         if (timeCheckInterval) clearInterval(timeCheckInterval);
         timeCheckInterval = setInterval(() => {
             if (currentUser) renderActiveSlots();
@@ -642,6 +649,26 @@
     function logout() {
         currentUser = null;
         if (timeCheckInterval) clearInterval(timeCheckInterval);
+
+        // 관리자 탭 및 화면 상태 완전 초기화
+        document.getElementById('tab-admin').classList.add('hidden');
+        document.getElementById('view-admin').classList.add('hidden');
+        document.getElementById('view-history').classList.add('hidden');
+        document.getElementById('view-attendance').classList.remove('hidden');
+
+        ['attendance', 'history', 'admin'].forEach(t => {
+            const tabBtn = document.getElementById(`tab-${t}`);
+            if (tabBtn) {
+                tabBtn.classList.remove('bg-blue-600', 'text-white');
+                tabBtn.classList.add('text-slate-400');
+            }
+        });
+        const attendanceTab = document.getElementById('tab-attendance');
+        if (attendanceTab) {
+            attendanceTab.classList.add('bg-blue-600', 'text-white');
+            attendanceTab.classList.remove('text-slate-400');
+        }
+
         document.getElementById('login-section').classList.remove('hidden');
         document.getElementById('main-section').classList.add('hidden');
         document.getElementById('user-info-bar').classList.add('hidden');
@@ -649,6 +676,9 @@
     }
 
     function switchTab(tabName) {
+        if (tabName === 'admin' && !isAdminUser()) {
+            tabName = 'attendance';
+        }
         ['attendance', 'history', 'admin'].forEach(t => {
             document.getElementById(`view-${t}`).classList.add('hidden');
             document.getElementById(`tab-${t}`).classList.remove('bg-blue-600', 'text-white');
@@ -660,11 +690,26 @@
     }
 
     function renderAll() {
+        if (!currentUser) return;
+
         if (appData.users[currentUser.id]) {
             currentUser.grade = appData.users[currentUser.id].grade;
             currentUser.role = appData.users[currentUser.id].role;
             document.getElementById('logged-in-badge').innerText = `${currentUser.id} (${gradeLabels[currentUser.grade]})`;
         }
+
+        if (currentUser.role === 'admin') {
+            document.getElementById('tab-admin').classList.remove('hidden');
+        } else {
+            document.getElementById('tab-admin').classList.add('hidden');
+            document.getElementById('view-admin').classList.add('hidden');
+            if (!document.getElementById('view-history').classList.contains('hidden')) {
+                // history 탭 유지
+            } else {
+                document.getElementById('view-attendance').classList.remove('hidden');
+            }
+        }
+
         renderActiveSlots();
         renderDashboard();
         renderHistoryOptions();
@@ -674,6 +719,7 @@
     }
 
     function renderActiveSlots() {
+        if (!currentUser) return;
         const container = document.getElementById('active-slots-container');
         const clockBadge = document.getElementById('current-clock-badge');
         const nowDate = new Date();
@@ -734,7 +780,7 @@
     }
 
     function submitSlotAttendance(type, slotId) {
-        if (isSubmittingAttendance) return;
+        if (!currentUser || isSubmittingAttendance) return;
 
         renderActiveSlots();
 
@@ -834,6 +880,7 @@
     // 관리자(Admin) 기능 함수들
     // =========================================================================
     function addScheduleSlot() {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         const type = document.getElementById('slot-type').value;
         const selectedDays = getSelectedDaysFromUI();
         const count = Number(document.getElementById('slot-count').value) || 1;
@@ -872,6 +919,7 @@
     }
 
     function deleteScheduleSlot(type, slotId) {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         if (confirm("이 고정 출석 시간 슬롯을 삭제하시겠습니까?")) {
             db.ref(`schedules/${type}/${slotId}`).remove();
         }
@@ -941,6 +989,7 @@
     }
 
     function deleteHistoryCycle(cycleKey, cycleNum) {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         if (!confirm(`과거 Cycle #${cycleNum} 기록을 삭제하시겠습니까?\n남아 있는 기록 기준으로 현재 Cycle 번호가 자동 조정됩니다.`)) return;
 
         const remainingHistory = { ...(appData.history || {}) };
@@ -963,6 +1012,7 @@
     }
 
     function renderAdminPanel() {
+        if (!isAdminUser()) return;
         renderSlotLists();
         renderAdminHistoryList();
 
@@ -1043,6 +1093,7 @@
     }
 
     function manualAddAttendance() {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         const uid = document.getElementById('manual-user-select').value;
         const type = document.getElementById('manual-event-type').value;
         const count = Number(document.getElementById('manual-event-count').value) || 1;
@@ -1069,12 +1120,14 @@
     }
 
     function deleteAttendanceLog(evId, uid) {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         if (confirm(`[${uid}] 유저의 해당 출석 기록을 삭제하시겠습니까?\n삭제 시 누적 점수에서 즉시 차감됩니다.`)) {
             db.ref(`logs/${evId}/${uid}`).remove();
         }
     }
 
     function saveSettings() {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         const lhHlVal = Number(document.getElementById('cfg-mult-LH_HL').value);
         const newSettings = {
             scores: {
@@ -1094,6 +1147,7 @@
     }
 
     function createUser() {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         const id = document.getElementById('new-user-id').value.trim();
         const pw = document.getElementById('new-user-pw').value.trim();
         const grade = document.getElementById('new-user-grade').value;
@@ -1110,16 +1164,19 @@
     }
 
     function updateUserGrade(uid, newGrade) {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         db.ref(`users/${uid}/grade`).set(newGrade);
     }
 
     function deleteUser(uid) {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         if (confirm(`정말 '${uid}' 계정을 삭제하시겠습니까?`)) {
             db.ref(`users/${uid}`).remove();
         }
     }
 
     function endCurrentCycle() {
+        if (!isAdminUser()) return alert("관리자 권한이 없습니다.");
         if (!confirm(`현재 Cycle #${appData.currentCycle}을 종료하시겠습니까?\n종료 시 현재 점수는 과거 기록으로 저장되고 0점으로 초기화됩니다.`)) return;
 
         const snapshotData = {};
