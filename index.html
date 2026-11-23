@@ -61,17 +61,16 @@
 
         <!-- [탭 1] 출석체크 및 실시간 순위 대시보드 -->
         <div id="view-attendance" class="space-y-6">
-            <!-- 유저 출석 체크 패널 (지정 시간 제한 적용) -->
+            <!-- 유저 출석 체크 패널 (현재 열린 시간대 슬롯 표시) -->
             <div class="card p-6 border-l-4 border-l-emerald-500">
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div class="flex justify-between items-center mb-3">
                     <div>
-                        <h3 class="text-lg font-bold text-emerald-400">현재 진행 중인 출석 이벤트</h3>
-                        <p id="active-event-info" class="text-sm text-slate-300 mt-1">진행 중인 출석이 없습니다.</p>
-                        <p id="active-event-time" class="text-xs text-amber-300 mt-1"></p>
+                        <h3 class="text-lg font-bold text-emerald-400">현재 출석 가능한 시간대</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">관리자가 지정한 출석 가능 시간 내에만 출석 버튼이 활성화됩니다.</p>
                     </div>
-                    <div id="check-in-box" class="flex items-center gap-2 w-full md:w-auto">
-                        <button id="check-in-btn" onclick="submitAttendance()" class="w-full md:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg transition whitespace-nowrap">출석 완료</button>
-                    </div>
+                </div>
+                <div id="active-slots-container" class="space-y-3">
+                    <p class="text-sm text-slate-400 py-4 text-center bg-slate-900/60 rounded-lg">현재 출석 가능한 시간대가 없습니다.</p>
                 </div>
             </div>
 
@@ -117,52 +116,92 @@
         <!-- [탭 3] 관리자 설정 패널 (Admin 전용) -->
         <div id="view-admin" class="hidden space-y-6">
             
-            <!-- 1. 출석 이벤트 오픈(시간 지정) & Cycle 종료 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="card p-6">
-                    <h3 class="text-lg font-bold text-emerald-400 mb-4">1. 출석 체크 오픈 (출석 가능 시간 설정)</h3>
-                    <div class="space-y-3">
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="block text-xs text-slate-400 mb-1">콘텐츠 종류</label>
-                                <select id="admin-event-type" class="w-full input-dark text-sm">
-                                    <option value="field">필드보스</option>
-                                    <option value="world">월드보스</option>
-                                    <option value="war">단체전투</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs text-slate-400 mb-1">인정 횟수</label>
-                                <input type="number" id="admin-event-count" value="1" min="1" class="w-full input-dark text-sm">
-                            </div>
+            <!-- 1. 콘텐츠별 출석 시간 슬롯 추가 (각 항목당 최대 10개) & Cycle 종료 -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 card p-6 border-l-4 border-l-emerald-500">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="text-lg font-bold text-emerald-400">1. 콘텐츠별 출석 오픈 시간 추가 (항목당 최대 10개)</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">필드보스, 월드보스, 단체전투 각각 최대 10개까지 시간대를 등록할 수 있습니다.</p>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div>
-                                <label class="block text-xs text-slate-400 mb-1">출석 시작 시간</label>
-                                <input type="datetime-local" id="admin-event-start" class="w-full input-dark text-xs">
-                            </div>
-                            <div>
-                                <label class="block text-xs text-slate-400 mb-1">출석 마감 시간</label>
-                                <input type="datetime-local" id="admin-event-end" class="w-full input-dark text-xs">
-                            </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 mb-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">콘텐츠 종류</label>
+                            <select id="slot-type" onchange="renderSlotLists()" class="w-full input-dark text-sm">
+                                <option value="field">필드보스</option>
+                                <option value="world">월드보스</option>
+                                <option value="war">단체전투</option>
+                            </select>
                         </div>
-                        <button onclick="openAttendanceEvent()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg transition">지정 시간으로 출석 오픈</button>
+                        <div class="md:col-span-2">
+                            <label class="block text-xs text-slate-400 mb-1">시간대 이름 (선택)</label>
+                            <input type="text" id="slot-title" class="w-full input-dark text-sm" placeholder="예: 저녁 1차 보탐">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">인정 횟수</label>
+                            <input type="number" id="slot-count" value="1" min="1" class="w-full input-dark text-sm">
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="addScheduleSlot()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg transition text-sm">+ 시간 추가</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">출석 시작 시간</label>
+                            <input type="datetime-local" id="slot-start" class="w-full input-dark text-xs">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">출석 마감 시간</label>
+                            <input type="datetime-local" id="slot-end" class="w-full input-dark text-xs">
+                        </div>
+                    </div>
+
+                    <!-- 3개 콘텐츠별 등록 현황 (각 최대 10개) -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-slate-900/90 border border-slate-700 rounded-lg p-3">
+                            <div class="flex justify-between items-center mb-2 pb-1.5 border-b border-slate-800">
+                                <span class="font-bold text-sm text-amber-300">필드보스</span>
+                                <span id="count-badge-field" class="text-xs text-slate-400">0 / 10</span>
+                            </div>
+                            <div id="slot-list-field" class="space-y-2 max-h-60 overflow-y-auto text-xs"></div>
+                        </div>
+
+                        <div class="bg-slate-900/90 border border-slate-700 rounded-lg p-3">
+                            <div class="flex justify-between items-center mb-2 pb-1.5 border-b border-slate-800">
+                                <span class="font-bold text-sm text-sky-300">월드보스</span>
+                                <span id="count-badge-world" class="text-xs text-slate-400">0 / 10</span>
+                            </div>
+                            <div id="slot-list-world" class="space-y-2 max-h-60 overflow-y-auto text-xs"></div>
+                        </div>
+
+                        <div class="bg-slate-900/90 border border-slate-700 rounded-lg p-3">
+                            <div class="flex justify-between items-center mb-2 pb-1.5 border-b border-slate-800">
+                                <span class="font-bold text-sm text-rose-300">단체전투</span>
+                                <span id="count-badge-war" class="text-xs text-slate-400">0 / 10</span>
+                            </div>
+                            <div id="slot-list-war" class="space-y-2 max-h-60 overflow-y-auto text-xs"></div>
+                        </div>
                     </div>
                 </div>
 
+                <!-- Cycle 종료 카드 -->
                 <div class="card p-6 flex flex-col justify-between border-amber-500/40">
                     <div>
                         <h3 class="text-lg font-bold text-amber-400 mb-2">2. 현재 Cycle 정산 및 종료</h3>
                         <p class="text-sm text-slate-400 mb-4">종료를 누르면 현재까지의 모든 유저 점수가 과거 기록(History)으로 영구 저장되며, 현재 누적 점수는 0점으로 초기화됩니다.</p>
+                        <p class="text-xs text-slate-500 bg-slate-900 p-3 rounded-lg border border-slate-800">※ 등록된 콘텐츠별 출석 시간 슬롯(각 최대 10개)은 다음 Cycle에서도 그대로 유지됩니다.</p>
                     </div>
-                    <button onclick="endCurrentCycle()" class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition">⚠️ 현재 Cycle 종료 및 데이터 아카이빙</button>
+                    <button onclick="endCurrentCycle()" class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition mt-6">⚠️ 현재 Cycle 종료 및 데이터 아카이빙</button>
                 </div>
             </div>
 
             <!-- 2. 관리자 수동 출석 추가 / 삭제 (시간 무관) -->
             <div class="card p-6 border-l-4 border-l-cyan-500">
                 <h3 class="text-lg font-bold text-cyan-400 mb-1">3. 유저별 출석 기록 수동 추가 / 삭제 (시간 무관)</h3>
-                <p class="text-xs text-slate-400 mb-4">출석 시간이 지났더라도 관리자는 특정 유저의 참여 내역을 직접 추가하거나 잘못된 기록을 삭제할 수 있습니다.</p>
+                <p class="text-xs text-slate-400 mb-4">출석 시간이 지났거나 별도 보상이 필요한 경우 관리자는 특정 유저의 참여 내역을 직접 추가하거나 잘못된 기록을 삭제할 수 있습니다.</p>
                 
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6 bg-slate-900 p-4 rounded-lg">
                     <div>
@@ -193,7 +232,7 @@
                             <tr>
                                 <th class="py-2 px-3">일시</th>
                                 <th class="py-2 px-3">유저 ID</th>
-                                <th class="py-2 px-3">콘텐츠 (횟수)</th>
+                                <th class="py-2 px-3">콘텐츠 / 슬롯 (횟수)</th>
                                 <th class="py-2 px-3">적용 등급</th>
                                 <th class="py-2 px-3 text-right">획득 점수</th>
                                 <th class="py-2 px-3 text-right">삭제</th>
@@ -303,6 +342,8 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    const MAX_SLOTS_PER_TYPE = 10;
+
     let currentUser = null;
     let timeCheckInterval = null;
     let appData = {
@@ -311,7 +352,11 @@
             scores: { field: 10, world: 20, war: 30 },
             multipliers: { LL: 1.3, LH_HL: 1.2, HH: 1.0 }
         },
-        activeEvent: null,
+        schedules: {
+            field: {},
+            world: {},
+            war: {}
+        },
         currentCycle: 1,
         logs: {},
         history: {}
@@ -357,6 +402,7 @@
                     admin: { pw: "0312", grade: "LL", role: "admin" }
                 },
                 settings: appData.settings,
+                schedules: { field: {}, world: {}, war: {} },
                 currentCycle: 1
             });
         }
@@ -368,7 +414,11 @@
         if (val) {
             appData.users = val.users || {};
             appData.settings = val.settings || appData.settings;
-            appData.activeEvent = val.activeEvent || null;
+            appData.schedules = {
+                field: (val.schedules && val.schedules.field) || {},
+                world: (val.schedules && val.schedules.world) || {},
+                war: (val.schedules && val.schedules.war) || {}
+            };
             appData.currentCycle = val.currentCycle || 1;
             appData.logs = val.logs || {};
             appData.history = val.history || {};
@@ -394,14 +444,14 @@
 
         if (currentUser.role === 'admin') {
             document.getElementById('tab-admin').classList.remove('hidden');
-            setDefaultEventTimes();
+            setDefaultSlotTimes();
         } else {
             document.getElementById('tab-admin').classList.add('hidden');
         }
 
         if (timeCheckInterval) clearInterval(timeCheckInterval);
         timeCheckInterval = setInterval(() => {
-            if (currentUser) renderActiveEvent();
+            if (currentUser) renderActiveSlots();
         }, 5000);
 
         renderAll();
@@ -433,7 +483,7 @@
             currentUser.role = appData.users[currentUser.id].role;
             document.getElementById('logged-in-badge').innerText = `${currentUser.id} (${gradeLabels[currentUser.grade]})`;
         }
-        renderActiveEvent();
+        renderActiveSlots();
         renderDashboard();
         renderHistoryOptions();
         if (currentUser.role === 'admin') {
@@ -441,73 +491,90 @@
         }
     }
 
-    function renderActiveEvent() {
-        const infoEl = document.getElementById('active-event-info');
-        const timeEl = document.getElementById('active-event-time');
-        const boxEl = document.getElementById('check-in-box');
-        const btnEl = document.getElementById('check-in-btn');
-        const ev = appData.activeEvent;
+    // 현재 시각에 출석 가능한 슬롯들을 찾아 렌더링
+    function renderActiveSlots() {
+        const container = document.getElementById('active-slots-container');
+        const now = Date.now();
+        const openSlots = [];
 
-        if (!ev) {
-            infoEl.innerHTML = "현재 열려있는 출석체크가 없습니다. 관리자의 오픈을 기다려주세요.";
-            timeEl.innerText = "";
-            boxEl.classList.add('opacity-50', 'pointer-events-none');
-            btnEl.innerText = "출석 대기중";
+        ['field', 'world', 'war'].forEach(type => {
+            const typeSlots = appData.schedules[type] || {};
+            Object.entries(typeSlots).forEach(([slotId, slot]) => {
+                if (now >= slot.startTime && now <= slot.endTime) {
+                    openSlots.push({ type, slotId, ...slot });
+                }
+            });
+        });
+
+        openSlots.sort((a, b) => a.startTime - b.startTime);
+
+        if (openSlots.length === 0) {
+            container.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center bg-slate-900/60 rounded-lg">현재 출석 가능한 시간대가 없습니다.</p>';
             return;
         }
 
-        const now = Date.now();
-        const startTime = ev.startTime || 0;
-        const endTime = ev.endTime || Infinity;
-        const alreadyChecked = appData.logs && appData.logs[ev.id] && appData.logs[ev.id][currentUser.id];
+        container.innerHTML = '';
+        openSlots.forEach(slot => {
+            const alreadyChecked = appData.logs && appData.logs[slot.slotId] && appData.logs[slot.slotId][currentUser.id];
+            const labelText = slot.title ? `${eventTypeLabels[slot.type]} - ${slot.title}` : eventTypeLabels[slot.type];
 
-        infoEl.innerHTML = `진행중: <strong class="text-white">${eventTypeLabels[ev.type]} (${ev.count}회 인정)</strong>`;
-        timeEl.innerText = `⏰ 출석 가능 시간: ${formatDisplayTime(startTime)} ~ ${formatDisplayTime(endTime)}`;
-
-        if (alreadyChecked) {
-            boxEl.classList.add('opacity-50', 'pointer-events-none');
-            btnEl.innerText = "출석 완료됨";
-        } else if (now < startTime) {
-            boxEl.classList.add('opacity-50', 'pointer-events-none');
-            btnEl.innerText = "출석 시작 전";
-        } else if (now > endTime) {
-            boxEl.classList.add('opacity-50', 'pointer-events-none');
-            btnEl.innerText = "출석 시간 마감";
-        } else {
-            boxEl.classList.remove('opacity-50', 'pointer-events-none');
-            btnEl.innerText = "출석 완료";
-        }
+            const row = document.createElement('div');
+            row.className = "flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-900/90 border border-slate-700 p-4 rounded-lg";
+            row.innerHTML = `
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 text-xs font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">진행중</span>
+                        <span class="font-bold text-white">${labelText}</span>
+                        <span class="text-xs text-amber-300">(${slot.count}회 인정)</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1">⏰ 출석 마감: ${formatDisplayTime(slot.endTime)} 까지</p>
+                </div>
+                <button
+                    onclick="submitSlotAttendance('${slot.type}', '${slot.slotId}')"
+                    ${alreadyChecked ? 'disabled' : ''}
+                    class="w-full sm:w-auto px-5 py-2 rounded-lg font-bold text-sm transition whitespace-nowrap ${
+                        alreadyChecked
+                            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }"
+                >
+                    ${alreadyChecked ? '출석 완료됨' : '출석 완료'}
+                </button>
+            `;
+            container.appendChild(row);
+        });
     }
 
-    function submitAttendance() {
-        const ev = appData.activeEvent;
-        if (!ev) return alert("진행 중인 출석 이벤트가 없습니다.");
+    function submitSlotAttendance(type, slotId) {
+        const slot = (appData.schedules[type] && appData.schedules[type][slotId]) || null;
+        if (!slot) return alert("해당 출석 시간 슬롯을 찾을 수 없습니다.");
 
         const now = Date.now();
-        if (ev.startTime && now < ev.startTime) {
-            return alert(`아직 출석 가능 시간이 아닙니다.\n(시작 시간: ${formatDisplayTime(ev.startTime)})`);
+        if (now < slot.startTime) {
+            return alert(`아직 출석 가능 시간이 아닙니다.\n(시작: ${formatDisplayTime(slot.startTime)})`);
         }
-        if (ev.endTime && now > ev.endTime) {
-            return alert(`출석 가능 시간이 종료되었습니다.\n(마감 시간: ${formatDisplayTime(ev.endTime)})\n누락된 경우 관리자에게 문의하세요.`);
+        if (now > slot.endTime) {
+            return alert(`출석 가능 시간이 종료되었습니다.\n(마감: ${formatDisplayTime(slot.endTime)})`);
         }
-
-        if (appData.logs && appData.logs[ev.id] && appData.logs[ev.id][currentUser.id]) {
-            return alert("이미 출석체크를 완료했습니다.");
+        if (appData.logs && appData.logs[slotId] && appData.logs[slotId][currentUser.id]) {
+            return alert("이미 해당 시간대 출석을 완료했습니다.");
         }
 
         const userGrade = appData.users[currentUser.id].grade;
-        const baseScore = Number(appData.settings.scores[ev.type]);
+        const baseScore = Number(appData.settings.scores[type]);
         const mult = getGradeMultiplier(userGrade);
-        const earnedPoints = Number((baseScore * ev.count * mult).toFixed(2));
+        const earnedPoints = Number((baseScore * slot.count * mult).toFixed(2));
+        const slotLabel = slot.title ? `${eventTypeLabels[type]}(${slot.title})` : eventTypeLabels[type];
 
-        db.ref(`logs/${ev.id}/${currentUser.id}`).set({
-            type: ev.type,
-            count: ev.count,
+        db.ref(`logs/${slotId}/${currentUser.id}`).set({
+            type,
+            slotLabel,
+            count: slot.count,
             gradeAtTime: userGrade,
             points: earnedPoints,
             timestamp: now
         }).then(() => {
-            alert(`출석 완료! (${earnedPoints}점 획득)`);
+            alert(`${slotLabel} 출석 완료! (${earnedPoints}점 획득)`);
         });
     }
 
@@ -554,14 +621,86 @@
     // =========================================================================
     // 관리자(Admin) 기능 함수들
     // =========================================================================
-    function setDefaultEventTimes() {
+    function setDefaultSlotTimes() {
         const now = new Date();
         const thirtyMinsLater = new Date(now.getTime() + 30 * 60000);
-        document.getElementById('admin-event-start').value = toLocalDatetimeInputString(now);
-        document.getElementById('admin-event-end').value = toLocalDatetimeInputString(thirtyMinsLater);
+        document.getElementById('slot-start').value = toLocalDatetimeInputString(now);
+        document.getElementById('slot-end').value = toLocalDatetimeInputString(thirtyMinsLater);
+    }
+
+    function addScheduleSlot() {
+        const type = document.getElementById('slot-type').value;
+        const title = document.getElementById('slot-title').value.trim();
+        const count = Number(document.getElementById('slot-count').value) || 1;
+        const startVal = document.getElementById('slot-start').value;
+        const endVal = document.getElementById('slot-end').value;
+
+        const currentSlots = appData.schedules[type] || {};
+        if (Object.keys(currentSlots).length >= MAX_SLOTS_PER_TYPE) {
+            return alert(`${eventTypeLabels[type]} 항목은 최대 ${MAX_SLOTS_PER_TYPE}개까지만 추가할 수 있습니다.\n기존 시간대를 삭제한 뒤 추가해주세요.`);
+        }
+
+        if (!startVal || !endVal) return alert("시작 시간과 마감 시간을 모두 입력하세요.");
+        const startTime = new Date(startVal).getTime();
+        const endTime = new Date(endVal).getTime();
+
+        if (endTime <= startTime) {
+            return alert("마감 시간은 시작 시간보다 이후여야 합니다.");
+        }
+
+        const slotId = `slot_${type}_${Date.now()}`;
+        db.ref(`schedules/${type}/${slotId}`).set({
+            title,
+            count,
+            startTime,
+            endTime,
+            createdAt: Date.now()
+        }).then(() => {
+            document.getElementById('slot-title').value = '';
+            alert(`${eventTypeLabels[type]} 출석 시간 슬롯이 추가되었습니다.`);
+        });
+    }
+
+    function deleteScheduleSlot(type, slotId) {
+        if (confirm("이 출석 시간 슬롯을 삭제하시겠습니까?")) {
+            db.ref(`schedules/${type}/${slotId}`).remove();
+        }
+    }
+
+    function renderSlotLists() {
+        ['field', 'world', 'war'].forEach(type => {
+            const listEl = document.getElementById(`slot-list-${type}`);
+            const badgeEl = document.getElementById(`count-badge-${type}`);
+            const entries = Object.entries(appData.schedules[type] || {})
+                .map(([id, data]) => ({ id, ...data }))
+                .sort((a, b) => a.startTime - b.startTime);
+
+            badgeEl.innerText = `${entries.length} / ${MAX_SLOTS_PER_TYPE}`;
+            listEl.innerHTML = '';
+
+            if (entries.length === 0) {
+                listEl.innerHTML = '<p class="text-slate-500 text-center py-4">등록된 시간 없음</p>';
+                return;
+            }
+
+            entries.forEach((s, idx) => {
+                const div = document.createElement('div');
+                div.className = "bg-slate-800/90 border border-slate-700 rounded p-2 flex justify-between items-start gap-2";
+                div.innerHTML = `
+                    <div>
+                        <div class="font-semibold text-slate-200">#${idx + 1} ${s.title ? s.title : eventTypeLabels[type]} <span class="text-amber-400">(${s.count}회)</span></div>
+                        <div class="text-slate-400 mt-0.5">${formatDisplayTime(s.startTime)} ~ ${formatDisplayTime(s.endTime)}</div>
+                    </div>
+                    <button onclick="deleteScheduleSlot('${type}', '${s.id}')" class="text-rose-400 hover:text-rose-300 font-bold px-1.5">✕</button>
+                `;
+                listEl.appendChild(div);
+            });
+        });
     }
 
     function renderAdminPanel() {
+        renderSlotLists();
+
         document.getElementById('cfg-score-field').value = appData.settings.scores.field;
         document.getElementById('cfg-score-world').value = appData.settings.scores.world;
         document.getElementById('cfg-score-war').value = appData.settings.scores.war;
@@ -596,12 +735,13 @@
             logsListEl.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-500">현재 Cycle에 기록된 출석 내역이 없습니다.</td></tr>';
         } else {
             flatLogs.forEach(item => {
+                const displaySlot = item.slotLabel || eventTypeLabels[item.type];
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-800/50";
                 tr.innerHTML = `
                     <td class="py-2 px-3 text-slate-400">${formatDisplayTime(item.timestamp)} ${item.isManual ? '<span class="text-cyan-400">[수동]</span>' : ''}</td>
                     <td class="py-2 px-3 font-semibold">${item.uid}</td>
-                    <td class="py-2 px-3">${eventTypeLabels[item.type]} (${item.count}회)</td>
+                    <td class="py-2 px-3">${displaySlot} (${item.count}회)</td>
                     <td class="py-2 px-3 text-slate-400">${gradeLabels[item.gradeAtTime] || '-'}</td>
                     <td class="py-2 px-3 text-right font-bold text-emerald-400">+${item.points}</td>
                     <td class="py-2 px-3 text-right">
@@ -637,35 +777,6 @@
         });
     }
 
-    function openAttendanceEvent() {
-        const type = document.getElementById('admin-event-type').value;
-        const count = Number(document.getElementById('admin-event-count').value) || 1;
-        const startVal = document.getElementById('admin-event-start').value;
-        const endVal = document.getElementById('admin-event-end').value;
-
-        if (!startVal || !endVal) return alert("출석 시작 시간과 마감 시간을 모두 설정해주세요.");
-
-        const startTime = new Date(startVal).getTime();
-        const endTime = new Date(endVal).getTime();
-
-        if (endTime <= startTime) {
-            return alert("마감 시간은 시작 시간보다 이후여야 합니다.");
-        }
-
-        const eventId = `ev_${Date.now()}`;
-
-        db.ref('activeEvent').set({
-            id: eventId,
-            type,
-            count,
-            startTime,
-            endTime,
-            createdAt: Date.now()
-        }).then(() => {
-            alert(`${eventTypeLabels[type]} (${count}회) 출석체크가 오픈되었습니다.\n가능 시간: ${formatDisplayTime(startTime)} ~ ${formatDisplayTime(endTime)}`);
-        });
-    }
-
     function manualAddAttendance() {
         const uid = document.getElementById('manual-user-select').value;
         const type = document.getElementById('manual-event-type').value;
@@ -681,6 +792,7 @@
 
         db.ref(`logs/${manualEventId}/${uid}`).set({
             type,
+            slotLabel: `${eventTypeLabels[type]}(수동)`,
             count,
             gradeAtTime: userGrade,
             points: earnedPoints,
@@ -767,7 +879,6 @@
             results: snapshotData
         };
         updates['logs'] = null;
-        updates['activeEvent'] = null;
         updates['currentCycle'] = appData.currentCycle + 1;
 
         db.ref().update(updates).then(() => {
