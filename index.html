@@ -23,7 +23,7 @@
     <!-- 헤더 -->
     <header class="flex flex-col md:flex-row justify-between items-center mb-8 pb-4 border-b border-slate-700 gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-amber-400">⚔️ 길드 레이드 출석 & 분배 시스템</h1>
+            <h1 class="text-2xl font-bold text-amber-400">⚔️ 길드 레이드 출석 &amp; 분배 시스템</h1>
             <p class="text-sm text-slate-400 mt-1">실시간 참여율 집계 및 스펙 가중치 기반 자동 정산</p>
         </div>
         <div id="user-info-bar" class="hidden flex items-center gap-3">
@@ -46,7 +46,7 @@
             </div>
             <button onclick="login()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 font-semibold rounded-lg transition">로그인</button>
         </div>
-        <p class="text-xs text-slate-500 mt-4 text-center">초기 관리자 계정: ID <code class="text-amber-400">admin</code> / PW <code class="text-amber-400">1234</code></p>
+        <p class="text-xs text-slate-500 mt-4 text-center">초기 관리자 계정: ID <code class="text-amber-400">admin</code> / PW <code class="text-amber-400">0312</code></p>
     </div>
 
     <!-- 2. 메인 대시보드 (로그인 후 표시) -->
@@ -54,12 +54,12 @@
         
         <!-- 상단 탭 메뉴 -->
         <div class="flex gap-2 border-b border-slate-700 pb-2 overflow-x-auto">
-            <button onclick="switchTab('attendance')" id="tab-attendance" class="px-4 py-2 rounded-lg font-medium bg-blue-600 text-white">📌 출석체크 & 현황</button>
+            <button onclick="switchTab('attendance')" id="tab-attendance" class="px-4 py-2 rounded-lg font-medium bg-blue-600 text-white">📌 출석체크 &amp; 현황</button>
             <button onclick="switchTab('history')" id="tab-history" class="px-4 py-2 rounded-lg font-medium text-slate-400 hover:bg-slate-800">📊 과거 Cycle 기록</button>
             <button onclick="switchTab('admin')" id="tab-admin" class="hidden px-4 py-2 rounded-lg font-medium text-amber-400 hover:bg-slate-800 border border-amber-500/30">⚙️ 관리자 설정</button>
         </div>
 
-        <!-- [탭 1] 출석체크 및 실시간 순위/분배 대시보드 -->
+        <!-- [탭 1] 출석체크 및 실시간 순위 대시보드 -->
         <div id="view-attendance" class="space-y-6">
             <!-- 유저 출석 체크 패널 (지정 시간 제한 적용) -->
             <div class="card p-6 border-l-4 border-l-emerald-500">
@@ -75,19 +75,11 @@
                 </div>
             </div>
 
-            <!-- 분배 시뮬레이터 & Cycle 요약 -->
+            <!-- Cycle 누적 점수 요약 -->
             <div class="card p-6">
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                    <div>
-                        <h3 class="text-lg font-bold">🏆 현재 Cycle 누적 점수 & 분배 현황 (<span id="current-cycle-label" class="text-amber-400">Cycle #1</span>)</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">점수 = 콘텐츠 기본점수 × 출석 당시 변신/펫 가중치</p>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-700">
-                        <span class="text-xs text-slate-400">총 분배 다이아:</span>
-                        <input type="number" id="total-reward-input" value="10000" oninput="renderDashboard()" class="input-dark w-28 text-right text-sm py-1">
-                        <span class="text-xs text-slate-400 ml-2">수수료(%):</span>
-                        <input type="number" id="tax-rate-input" value="8" oninput="renderDashboard()" class="input-dark w-16 text-right text-sm py-1">
-                    </div>
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold">🏆 현재 Cycle 누적 점수 현황 (<span id="current-cycle-label" class="text-amber-400">Cycle #1</span>)</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">점수 = 콘텐츠 기본점수 × 출석 당시 변신/펫 가중치</p>
                 </div>
 
                 <div class="overflow-x-auto">
@@ -98,9 +90,7 @@
                                 <th class="py-3 px-4">유저 ID</th>
                                 <th class="py-3 px-4">현재 등급 (변신/펫)</th>
                                 <th class="py-3 px-4">참여 상세 (필드/월드/단체)</th>
-                                <th class="py-3 px-4 text-right">누적 점수</th>
-                                <th class="py-3 px-4 text-right">지분율</th>
-                                <th class="py-3 px-4 text-right text-amber-400">예상 실수령액</th>
+                                <th class="py-3 px-4 text-right text-emerald-400">누적 점수</th>
                             </tr>
                         </thead>
                         <tbody id="scoreboard-body" class="divide-y divide-slate-800 text-sm"></tbody>
@@ -216,7 +206,7 @@
 
             <!-- 3. 점수 및 가중치 비율 설정 -->
             <div class="card p-6">
-                <h3 class="text-lg font-bold text-blue-400 mb-4">4. 콘텐츠 기여 점수 & 스펙 가중치 설정</h3>
+                <h3 class="text-lg font-bold text-blue-400 mb-4">4. 콘텐츠 기여 점수 &amp; 스펙 가중치 설정</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="space-y-3 bg-slate-900 p-4 rounded-lg">
                         <h4 class="font-semibold text-sm text-slate-300">콘텐츠 1회당 기본 점수 (기여 비중)</h4>
@@ -359,12 +349,12 @@
         return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
-    // 최초 실행 시 기본 admin 계정 생성
+    // 최초 실행 시 기본 admin 계정 생성 (비밀번호: 0312)
     db.ref('/').once('value', (snapshot) => {
         if (!snapshot.exists()) {
             db.ref('/').set({
                 users: {
-                    admin: { pw: "1234", grade: "LL", role: "admin" }
+                    admin: { pw: "0312", grade: "LL", role: "admin" }
                 },
                 settings: appData.settings,
                 currentCycle: 1
@@ -526,10 +516,6 @@
         const tbody = document.getElementById('scoreboard-body');
         tbody.innerHTML = '';
 
-        const totalReward = Number(document.getElementById('total-reward-input').value) || 0;
-        const taxRate = Number(document.getElementById('tax-rate-input').value) || 0;
-        const netReward = totalReward * (1 - taxRate / 100);
-
         const summary = {};
         Object.keys(appData.users).forEach(uid => {
             summary[uid] = {
@@ -540,14 +526,11 @@
             };
         });
 
-        let grandTotalPoints = 0;
-
         Object.values(appData.logs).forEach(eventLogs => {
             Object.entries(eventLogs).forEach(([uid, record]) => {
                 if (summary[uid]) {
                     summary[uid][record.type] += record.count;
                     summary[uid].totalPoints += record.points;
-                    grandTotalPoints += record.points;
                 }
             });
         });
@@ -555,9 +538,6 @@
         const sortedUsers = Object.values(summary).sort((a, b) => b.totalPoints - a.totalPoints);
 
         sortedUsers.forEach((u, idx) => {
-            const share = grandTotalPoints > 0 ? (u.totalPoints / grandTotalPoints) : 0;
-            const myReward = Math.floor(netReward * share);
-
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-800/50 transition";
             tr.innerHTML = `
@@ -566,8 +546,6 @@
                 <td class="py-3 px-4 text-xs"><span class="px-2 py-1 bg-slate-800 rounded border border-slate-600">${gradeLabels[u.grade]}</span></td>
                 <td class="py-3 px-4 text-slate-300 text-xs">필드 ${u.field} / 월드 ${u.world} / 단체 ${u.war}</td>
                 <td class="py-3 px-4 text-right font-bold text-emerald-400">${u.totalPoints.toFixed(1)} 점</td>
-                <td class="py-3 px-4 text-right text-slate-300">${(share * 100).toFixed(1)}%</td>
-                <td class="py-3 px-4 text-right font-bold text-amber-400">${myReward.toLocaleString()}</td>
             `;
             tbody.appendChild(tr);
         });
