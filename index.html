@@ -13,8 +13,8 @@
         .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; }
         .input-dark { background-color: #0f172a; border: 1px solid #475569; color: white; border-radius: 0.375rem; padding: 0.5rem 0.75rem; }
         .input-dark:focus { outline: none; border-color: #3b82f6; }
-        /* 달력/시간 아이콘 다크모드 대응 */
-        input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        /* 시간 입력 시계 아이콘 다크모드 대응 */
+        input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-8">
@@ -60,13 +60,14 @@
 
         <!-- [탭 1] 출석체크 및 실시간 순위 대시보드 -->
         <div id="view-attendance" class="space-y-6">
-            <!-- 유저 출석 체크 패널 (현재 열린 시간대 슬롯 표시) -->
+            <!-- 유저 출석 체크 패널 (고정 요일/시간대 슬롯 자동 오픈) -->
             <div class="card p-6 border-l-4 border-l-emerald-500">
-                <div class="flex justify-between items-center mb-3">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 mb-3">
                     <div>
                         <h3 class="text-lg font-bold text-emerald-400">현재 출석 가능한 시간대</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">관리자가 지정한 출석 가능 시간 내에만 출석 버튼이 활성화됩니다.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">등록된 요일 및 시작~마감 시간에 맞춰 출석체크가 자동으로 열리고 닫힙니다.</p>
                     </div>
+                    <span id="current-clock-badge" class="text-xs text-slate-400 font-mono"></span>
                 </div>
                 <div id="active-slots-container" class="space-y-3">
                     <p class="text-sm text-slate-400 py-4 text-center bg-slate-900/60 rounded-lg">현재 출석 가능한 시간대가 없습니다.</p>
@@ -115,17 +116,15 @@
         <!-- [탭 3] 관리자 설정 패널 (Admin 전용) -->
         <div id="view-admin" class="hidden space-y-6">
             
-            <!-- 1. 콘텐츠별 출석 시간 슬롯 추가 (각 항목당 최대 10개) & Cycle 종료 -->
+            <!-- 1. 콘텐츠별 고정 출석 시간 슬롯 추가 (항목당 최대 10개) & Cycle 종료 -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="lg:col-span-2 card p-6 border-l-4 border-l-emerald-500">
-                    <div class="flex justify-between items-center mb-4">
-                        <div>
-                            <h3 class="text-lg font-bold text-emerald-400">1. 콘텐츠별 출석 오픈 시간 추가 (항목당 최대 10개)</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">필드보스, 월드보스, 단체전투 각각 최대 10개까지 시간대를 등록할 수 있습니다.</p>
-                        </div>
+                    <div class="mb-4">
+                        <h3 class="text-lg font-bold text-emerald-400">1. 콘텐츠별 고정 출석 시간 추가 (항목당 최대 10개)</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">매일 또는 특정 요일과 시작~마감 시각을 지정하면 해당 시간마다 자동으로 출석이 열립니다.</p>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 mb-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
                         <div>
                             <label class="block text-xs text-slate-400 mb-1">콘텐츠 종류</label>
                             <select id="slot-type" onchange="renderSlotLists()" class="w-full input-dark text-sm">
@@ -134,27 +133,40 @@
                                 <option value="war">단체전투</option>
                             </select>
                         </div>
-                        <div class="md:col-span-2">
-                            <label class="block text-xs text-slate-400 mb-1">시간대 이름 (선택)</label>
-                            <input type="text" id="slot-title" class="w-full input-dark text-sm" placeholder="예: 저녁 1차 보탐">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">반복 요일</label>
+                            <select id="slot-day" class="w-full input-dark text-sm">
+                                <option value="ALL">매일</option>
+                                <option value="1">월요일</option>
+                                <option value="2">화요일</option>
+                                <option value="3">수요일</option>
+                                <option value="4">목요일</option>
+                                <option value="5">금요일</option>
+                                <option value="6">토요일</option>
+                                <option value="0">일요일</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-xs text-slate-400 mb-1">인정 횟수</label>
                             <input type="number" id="slot-count" value="1" min="1" class="w-full input-dark text-sm">
                         </div>
-                        <div class="flex items-end">
-                            <button onclick="addScheduleSlot()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg transition text-sm">+ 시간 추가</button>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">시간대 이름 (선택)</label>
+                            <input type="text" id="slot-title" class="w-full input-dark text-sm" placeholder="예: 저녁 보탐">
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-5">
                         <div>
-                            <label class="block text-xs text-slate-400 mb-1">출석 시작 시간</label>
-                            <input type="datetime-local" id="slot-start" class="w-full input-dark text-xs">
+                            <label class="block text-xs text-slate-400 mb-1">시작 시간</label>
+                            <input type="time" id="slot-start-time" value="21:00" class="w-full input-dark text-sm">
                         </div>
                         <div>
-                            <label class="block text-xs text-slate-400 mb-1">출석 마감 시간</label>
-                            <input type="datetime-local" id="slot-end" class="w-full input-dark text-xs">
+                            <label class="block text-xs text-slate-400 mb-1">마감 시간</label>
+                            <input type="time" id="slot-end-time" value="21:30" class="w-full input-dark text-sm">
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="addScheduleSlot()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg transition text-sm">+ 고정 시간 추가</button>
                         </div>
                     </div>
 
@@ -191,7 +203,7 @@
                     <div>
                         <h3 class="text-lg font-bold text-amber-400 mb-2">2. 현재 Cycle 정산 및 종료</h3>
                         <p class="text-sm text-slate-400 mb-4">종료를 누르면 현재까지의 모든 유저 점수가 과거 기록(History)으로 영구 저장되며, 현재 누적 점수는 0점으로 초기화됩니다.</p>
-                        <p class="text-xs text-slate-500 bg-slate-900 p-3 rounded-lg border border-slate-800">※ 등록된 콘텐츠별 출석 시간 슬롯(각 최대 10개)은 다음 Cycle에서도 그대로 유지됩니다.</p>
+                        <p class="text-xs text-slate-500 bg-slate-900 p-3 rounded-lg border border-slate-800">※ 등록된 고정 출석 시간(요일·시간대 슬롯, 각 최대 10개)은 다음 Cycle에서도 그대로 유지됩니다.</p>
                     </div>
                     <button onclick="endCurrentCycle()" class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition mt-6">⚠️ 현재 Cycle 종료 및 데이터 아카이빙</button>
                 </div>
@@ -375,6 +387,28 @@
         war: "단체전투"
     };
 
+    const dayLabels = {
+        ALL: "매일",
+        0: "일요일",
+        1: "월요일",
+        2: "화요일",
+        3: "수요일",
+        4: "목요일",
+        5: "금요일",
+        6: "토요일"
+    };
+
+    const dayOrder = {
+        ALL: -1,
+        1: 0,
+        2: 1,
+        3: 2,
+        4: 3,
+        5: 4,
+        6: 5,
+        0: 6
+    };
+
     function getGradeMultiplier(grade) {
         const mults = appData.settings.multipliers || {};
         if (grade === 'LL') return Number(mults.LL ?? 1.3);
@@ -382,9 +416,16 @@
         return Number(mults.HH ?? 1.0);
     }
 
-    function toLocalDatetimeInputString(date) {
+    function parseTimeToMinutes(timeStr) {
+        if (!timeStr || !timeStr.includes(':')) return null;
+        const [h, m] = timeStr.split(':').map(Number);
+        if (Number.isNaN(h) || Number.isNaN(m)) return null;
+        return h * 60 + m;
+    }
+
+    function getDateKey(dateObj) {
         const pad = (n) => String(n).padStart(2, '0');
-        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
     }
 
     function formatDisplayTime(ts) {
@@ -392,6 +433,47 @@
         const d = new Date(ts);
         const pad = (n) => String(n).padStart(2, '0');
         return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // 현재 시각 기준으로 슬롯이 열려 있는지 판별 (자정 넘김 시간대 포함)
+    function evaluateSlotOpenState(slot, nowDate = new Date()) {
+        const startMin = parseTimeToMinutes(slot.startTime);
+        const endMin = parseTimeToMinutes(slot.endTime);
+        if (startMin === null || endMin === null) return { isOpen: false, occurrenceDateKey: getDateKey(nowDate) };
+
+        const curMin = nowDate.getHours() * 60 + nowDate.getMinutes();
+        const curDay = nowDate.getDay();
+
+        // 같은 날 내 시간대 (예: 21:00 ~ 21:30)
+        if (startMin <= endMin) {
+            const dayMatches = (slot.day === 'ALL') || (String(slot.day) === String(curDay));
+            const timeMatches = (curMin >= startMin) && (curMin <= endMin);
+            return {
+                isOpen: dayMatches && timeMatches,
+                occurrenceDateKey: getDateKey(nowDate)
+            };
+        }
+
+        // 자정을 넘기는 시간대 (예: 23:30 ~ 00:30)
+        if (curMin >= startMin) {
+            const dayMatches = (slot.day === 'ALL') || (String(slot.day) === String(curDay));
+            return {
+                isOpen: dayMatches,
+                occurrenceDateKey: getDateKey(nowDate)
+            };
+        }
+
+        if (curMin <= endMin) {
+            const yesterday = new Date(nowDate.getTime() - 24 * 60 * 60 * 1000);
+            const yesterdayDay = yesterday.getDay();
+            const dayMatches = (slot.day === 'ALL') || (String(slot.day) === String(yesterdayDay));
+            return {
+                isOpen: dayMatches,
+                occurrenceDateKey: getDateKey(yesterday)
+            };
+        }
+
+        return { isOpen: false, occurrenceDateKey: getDateKey(nowDate) };
     }
 
     // 최초 실행 시 기본 admin 계정 생성 (비밀번호: 0312)
@@ -444,7 +526,6 @@
 
         if (currentUser.role === 'admin') {
             document.getElementById('tab-admin').classList.remove('hidden');
-            setDefaultSlotTimes();
         } else {
             document.getElementById('tab-admin').classList.add('hidden');
         }
@@ -491,22 +572,28 @@
         }
     }
 
-    // 현재 시각에 출석 가능한 슬롯들을 찾아 렌더링
+    // 현재 요일/시각에 맞춰 자동으로 열린 출석 시간대 렌더링
     function renderActiveSlots() {
         const container = document.getElementById('active-slots-container');
-        const now = Date.now();
+        const clockBadge = document.getElementById('current-clock-badge');
+        const nowDate = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        clockBadge.innerText = `현재 시각: ${dayLabels[nowDate.getDay()]} ${pad(nowDate.getHours())}:${pad(nowDate.getMinutes())}:${pad(nowDate.getSeconds())}`;
+
         const openSlots = [];
 
         ['field', 'world', 'war'].forEach(type => {
             const typeSlots = appData.schedules[type] || {};
             Object.entries(typeSlots).forEach(([slotId, slot]) => {
-                if (now >= slot.startTime && now <= slot.endTime) {
-                    openSlots.push({ type, slotId, ...slot });
+                const state = evaluateSlotOpenState(slot, nowDate);
+                if (state.isOpen) {
+                    const logKey = `${slotId}_${state.occurrenceDateKey}`;
+                    openSlots.push({ type, slotId, logKey, ...slot });
                 }
             });
         });
 
-        openSlots.sort((a, b) => a.startTime - b.startTime);
+        openSlots.sort((a, b) => (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0));
 
         if (openSlots.length === 0) {
             container.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center bg-slate-900/60 rounded-lg">현재 출석 가능한 시간대가 없습니다.</p>';
@@ -515,19 +602,20 @@
 
         container.innerHTML = '';
         openSlots.forEach(slot => {
-            const alreadyChecked = appData.logs && appData.logs[slot.slotId] && appData.logs[slot.slotId][currentUser.id];
+            const alreadyChecked = appData.logs && appData.logs[slot.logKey] && appData.logs[slot.logKey][currentUser.id];
+            const dayName = dayLabels[slot.day] ?? '매일';
             const labelText = slot.title ? `${eventTypeLabels[slot.type]} - ${slot.title}` : eventTypeLabels[slot.type];
 
             const row = document.createElement('div');
             row.className = "flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-900/90 border border-slate-700 p-4 rounded-lg";
             row.innerHTML = `
                 <div>
-                    <div class="flex items-center gap-2">
-                        <span class="px-2 py-0.5 text-xs font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">진행중</span>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="px-2 py-0.5 text-xs font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">출석 가능</span>
                         <span class="font-bold text-white">${labelText}</span>
                         <span class="text-xs text-amber-300">(${slot.count}회 인정)</span>
                     </div>
-                    <p class="text-xs text-slate-400 mt-1">⏰ 출석 마감: ${formatDisplayTime(slot.endTime)} 까지</p>
+                    <p class="text-xs text-slate-400 mt-1">🗓️ ${dayName} · ⏰ ${slot.startTime} ~ ${slot.endTime}</p>
                 </div>
                 <button
                     onclick="submitSlotAttendance('${slot.type}', '${slot.slotId}')"
@@ -549,14 +637,14 @@
         const slot = (appData.schedules[type] && appData.schedules[type][slotId]) || null;
         if (!slot) return alert("해당 출석 시간 슬롯을 찾을 수 없습니다.");
 
-        const now = Date.now();
-        if (now < slot.startTime) {
-            return alert(`아직 출석 가능 시간이 아닙니다.\n(시작: ${formatDisplayTime(slot.startTime)})`);
+        const nowDate = new Date();
+        const state = evaluateSlotOpenState(slot, nowDate);
+        if (!state.isOpen) {
+            return alert(`현재는 출석 가능 시간이 아닙니다.\n설정 시간: ${dayLabels[slot.day] ?? '매일'} ${slot.startTime} ~ ${slot.endTime}`);
         }
-        if (now > slot.endTime) {
-            return alert(`출석 가능 시간이 종료되었습니다.\n(마감: ${formatDisplayTime(slot.endTime)})`);
-        }
-        if (appData.logs && appData.logs[slotId] && appData.logs[slotId][currentUser.id]) {
+
+        const logKey = `${slotId}_${state.occurrenceDateKey}`;
+        if (appData.logs && appData.logs[logKey] && appData.logs[logKey][currentUser.id]) {
             return alert("이미 해당 시간대 출석을 완료했습니다.");
         }
 
@@ -566,13 +654,13 @@
         const earnedPoints = Number((baseScore * slot.count * mult).toFixed(2));
         const slotLabel = slot.title ? `${eventTypeLabels[type]}(${slot.title})` : eventTypeLabels[type];
 
-        db.ref(`logs/${slotId}/${currentUser.id}`).set({
+        db.ref(`logs/${logKey}/${currentUser.id}`).set({
             type,
             slotLabel,
             count: slot.count,
             gradeAtTime: userGrade,
             points: earnedPoints,
-            timestamp: now
+            timestamp: nowDate.getTime()
         }).then(() => {
             alert(`${slotLabel} 출석 완료! (${earnedPoints}점 획득)`);
         });
@@ -621,35 +709,29 @@
     // =========================================================================
     // 관리자(Admin) 기능 함수들
     // =========================================================================
-    function setDefaultSlotTimes() {
-        const now = new Date();
-        const thirtyMinsLater = new Date(now.getTime() + 30 * 60000);
-        document.getElementById('slot-start').value = toLocalDatetimeInputString(now);
-        document.getElementById('slot-end').value = toLocalDatetimeInputString(thirtyMinsLater);
-    }
-
     function addScheduleSlot() {
         const type = document.getElementById('slot-type').value;
-        const title = document.getElementById('slot-title').value.trim();
+        const day = document.getElementById('slot-day').value;
         const count = Number(document.getElementById('slot-count').value) || 1;
-        const startVal = document.getElementById('slot-start').value;
-        const endVal = document.getElementById('slot-end').value;
+        const title = document.getElementById('slot-title').value.trim();
+        const startTime = document.getElementById('slot-start-time').value;
+        const endTime = document.getElementById('slot-end-time').value;
 
         const currentSlots = appData.schedules[type] || {};
         if (Object.keys(currentSlots).length >= MAX_SLOTS_PER_TYPE) {
             return alert(`${eventTypeLabels[type]} 항목은 최대 ${MAX_SLOTS_PER_TYPE}개까지만 추가할 수 있습니다.\n기존 시간대를 삭제한 뒤 추가해주세요.`);
         }
 
-        if (!startVal || !endVal) return alert("시작 시간과 마감 시간을 모두 입력하세요.");
-        const startTime = new Date(startVal).getTime();
-        const endTime = new Date(endVal).getTime();
-
-        if (endTime <= startTime) {
-            return alert("마감 시간은 시작 시간보다 이후여야 합니다.");
+        if (!startTime || !endTime) {
+            return alert("시작 시간과 마감 시간을 모두 입력하세요.");
+        }
+        if (startTime === endTime) {
+            return alert("시작 시간과 마감 시간은 달라야 합니다.");
         }
 
         const slotId = `slot_${type}_${Date.now()}`;
         db.ref(`schedules/${type}/${slotId}`).set({
+            day,
             title,
             count,
             startTime,
@@ -657,12 +739,12 @@
             createdAt: Date.now()
         }).then(() => {
             document.getElementById('slot-title').value = '';
-            alert(`${eventTypeLabels[type]} 출석 시간 슬롯이 추가되었습니다.`);
+            alert(`${eventTypeLabels[type]} 고정 출석 시간(${dayLabels[day]} ${startTime}~${endTime})이 추가되었습니다.`);
         });
     }
 
     function deleteScheduleSlot(type, slotId) {
-        if (confirm("이 출석 시간 슬롯을 삭제하시겠습니까?")) {
+        if (confirm("이 고정 출석 시간 슬롯을 삭제하시겠습니까?")) {
             db.ref(`schedules/${type}/${slotId}`).remove();
         }
     }
@@ -673,7 +755,11 @@
             const badgeEl = document.getElementById(`count-badge-${type}`);
             const entries = Object.entries(appData.schedules[type] || {})
                 .map(([id, data]) => ({ id, ...data }))
-                .sort((a, b) => a.startTime - b.startTime);
+                .sort((a, b) => {
+                    const dayDiff = (dayOrder[a.day] ?? 99) - (dayOrder[b.day] ?? 99);
+                    if (dayDiff !== 0) return dayDiff;
+                    return (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0);
+                });
 
             badgeEl.innerText = `${entries.length} / ${MAX_SLOTS_PER_TYPE}`;
             listEl.innerHTML = '';
@@ -684,12 +770,13 @@
             }
 
             entries.forEach((s, idx) => {
+                const dayName = dayLabels[s.day] ?? '매일';
                 const div = document.createElement('div');
                 div.className = "bg-slate-800/90 border border-slate-700 rounded p-2 flex justify-between items-start gap-2";
                 div.innerHTML = `
                     <div>
-                        <div class="font-semibold text-slate-200">#${idx + 1} ${s.title ? s.title : eventTypeLabels[type]} <span class="text-amber-400">(${s.count}회)</span></div>
-                        <div class="text-slate-400 mt-0.5">${formatDisplayTime(s.startTime)} ~ ${formatDisplayTime(s.endTime)}</div>
+                        <div class="font-semibold text-slate-200">#${idx + 1} [${dayName}] ${s.title ? s.title : eventTypeLabels[type]} <span class="text-amber-400">(${s.count}회)</span></div>
+                        <div class="text-slate-400 mt-0.5">${s.startTime} ~ ${s.endTime}</div>
                     </div>
                     <button onclick="deleteScheduleSlot('${type}', '${s.id}')" class="text-rose-400 hover:text-rose-300 font-bold px-1.5">✕</button>
                 `;
