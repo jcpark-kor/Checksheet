@@ -387,6 +387,7 @@
 
     let currentUser = null;
     let timeCheckInterval = null;
+    let isSubmittingAttendance = false;
     let appData = {
         users: {},
         settings: {
@@ -453,11 +454,12 @@
         return Number(mults.HH ?? 1.0);
     }
 
-    function parseTimeToMinutes(timeStr) {
+    // HH:MM 문자열을 자정 기준 초(0 ~ 86399)로 변환
+    function parseTimeToSeconds(timeStr) {
         if (!timeStr || !timeStr.includes(':')) return null;
         const [h, m] = timeStr.split(':').map(Number);
         if (Number.isNaN(h) || Number.isNaN(m)) return null;
-        return h * 60 + m;
+        return h * 3600 + m * 60;
     }
 
     function getDateKey(dateObj) {
@@ -472,7 +474,6 @@
         return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
-    // 슬롯에서 요일 배열 추출 (days 배열 및 구버전 day 필드 호환)
     function normalizeSlotDays(slot) {
         if (Array.isArray(slot.days) && slot.days.length > 0) {
             return slot.days.map(String);
@@ -494,7 +495,6 @@
             .join(", ");
     }
 
-    // 요일 체크박스 도우미
     function toggleEverydayCheckbox() {
         const allChecked = document.getElementById('slot-day-all').checked;
         document.querySelectorAll('.slot-day-cb').forEach(cb => {
@@ -522,46 +522,56 @@
         return Array.from(document.querySelectorAll('.slot-day-cb:checked')).map(cb => String(cb.value));
     }
 
-    // 현재 시각 기준으로 슬롯이 열려 있는지 판별 (자정 넘김 시간대 포함)
+    // 현재 시각(초 단위) 기준으로 슬롯이 열려 있는지 판별
+    // 마감 시각(예: 21:30 -> 21:30:00)이 지나면 즉시 isOpen = false
     function evaluateSlotOpenState(slot, nowDate = new Date()) {
-        const startMin = parseTimeToMinutes(slot.startTime);
-        const endMin = parseTimeToMinutes(slot.endTime);
-        if (startMin === null || endMin === null) return { isOpen: false, occurrenceDateKey: getDateKey(nowDate) };
+        const startSec = parseTimeToSeconds(slot.startTime);
+        const endSec = parseTimeToSeconds(slot.endTime);
+        if (startSec === null || endSec === null) {
+            return { isOpen: false, reason: 'expired', occurrenceDateKey: getDateKey(nowDate) };
+        }
 
-        const curMin = nowDate.getHours() * 60 + nowDate.getMinutes();
+        const curSec = nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds();
         const curDay = String(nowDate.getDay());
         const allowedDays = normalizeSlotDays(slot);
 
-        // 같은 날 내 시간대 (예: 21:00 ~ 21:30)
-        if (startMin <= endMin) {
+        // 같은 날 내 시간대 (예: 21:00:00 ~ 21:30:00)
+        if (startSec <= endSec) {
             const dayMatches = allowedDays.includes(curDay);
-            const timeMatches = (curMin >= startMin) && (curMin <= endMin);
-            return {
-                isOpen: dayMatches && timeMatches,
-                occurrenceDateKey: getDateKey(nowDate)
-            };
+            if (!dayMatches) {
+                return { isOpen: false, reason: 'day', occurrenceDateKey: getDateKey(nowDate) };
+            }
+            if (curSec < startSec) {
+                return { isOpen: false, reason: 'before', occurrenceDateKey: getDateKey(nowDate) };
+            }
+            if (curSec >= endSec) {
+                return { isOpen: false, reason: 'expired', occurrenceDateKey: getDateKey(nowDate) };
+            }
+            return { isOpen: true, reason: 'open', occurrenceDateKey: getDateKey(nowDate) };
         }
 
-        // 자정을 넘기는 시간대 (예: 23:30 ~ 00:30)
-        if (curMin >= startMin) {
+        // 자정을 넘기는 시간대 (예: 23:30:00 ~ 00:30:00)
+        if (curSec >= startSec) {
             const dayMatches = allowedDays.includes(curDay);
             return {
                 isOpen: dayMatches,
+                reason: dayMatches ? 'open' : 'day',
                 occurrenceDateKey: getDateKey(nowDate)
             };
         }
 
-        if (curMin <= endMin) {
+        if (curSec < endSec) {
             const yesterday = new Date(nowDate.getTime() - 24 * 60 * 60 * 1000);
             const yesterdayDay = String(yesterday.getDay());
             const dayMatches = allowedDays.includes(yesterdayDay);
             return {
                 isOpen: dayMatches,
+                reason: dayMatches ? 'open' : 'expired',
                 occurrenceDateKey: getDateKey(yesterday)
             };
         }
 
-        return { isOpen: false, occurrenceDateKey: getDateKey(nowDate) };
+        return { isOpen: false, reason: 'expired', occurrenceDateKey: getDateKey(nowDate) };
     }
 
     // 최초 실행 시 기본 admin 계정 생성 (비밀번호: 0312)
@@ -621,7 +631,7 @@
         if (timeCheckInterval) clearInterval(timeCheckInterval);
         timeCheckInterval = setInterval(() => {
             if (currentUser) renderActiveSlots();
-        }, 5000);
+        }, 1000);
 
         renderAll();
     }
@@ -660,7 +670,7 @@
         }
     }
 
-    // 현재 요일/시각에 맞춰 자동으로 열린 출석 시간대 렌더링
+    // 현재 요일/시각에 맞춰 출석 가능한 슬롯만 표시 (종료 시각 경과 시 즉시 제외)
     function renderActiveSlots() {
         const container = document.getElementById('active-slots-container');
         const clockBadge = document.getElementById('current-clock-badge');
@@ -681,7 +691,7 @@
             });
         });
 
-        openSlots.sort((a, b) => (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0));
+        openSlots.sort((a, b) => (parseTimeToSeconds(a.startTime) || 0) - (parseTimeToSeconds(b.startTime) || 0));
 
         if (openSlots.length === 0) {
             container.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center bg-slate-900/60 rounded-lg">현재 출석 가능한 시간대가 없습니다.</p>';
@@ -690,7 +700,7 @@
 
         container.innerHTML = '';
         openSlots.forEach(slot => {
-            const alreadyChecked = appData.logs && appData.logs[slot.logKey] && appData.logs[slot.logKey][currentUser.id];
+            const alreadyChecked = Boolean(appData.logs && appData.logs[slot.logKey] && appData.logs[slot.logKey][currentUser.id]);
             const daysText = formatSlotDaysLabel(slot);
             const labelText = slot.title ? `${eventTypeLabels[slot.type]} - ${slot.title}` : eventTypeLabels[slot.type];
 
@@ -703,7 +713,7 @@
                         <span class="font-bold text-white">${labelText}</span>
                         <span class="text-xs text-amber-300">(${slot.count}회 인정)</span>
                     </div>
-                    <p class="text-xs text-slate-400 mt-1">🗓️ ${daysText} · ⏰ ${slot.startTime} ~ ${slot.endTime}</p>
+                    <p class="text-xs text-slate-400 mt-1">🗓️ ${daysText} · ⏰ ${slot.startTime} ~ ${slot.endTime} 마감</p>
                 </div>
                 <button
                     onclick="submitSlotAttendance('${slot.type}', '${slot.slotId}')"
@@ -721,19 +731,30 @@
         });
     }
 
+    // 출석 제출 시 마감 시간을 실시간 재검증하여 종료 시각 이후 클릭 차단
     function submitSlotAttendance(type, slotId) {
+        if (isSubmittingAttendance) return;
+
+        // 최신 스케줄 및 현재 시각 즉시 재확인
+        renderActiveSlots();
+
         const slot = (appData.schedules[type] && appData.schedules[type][slotId]) || null;
-        if (!slot) return alert("해당 출석 시간 슬롯을 찾을 수 없습니다.");
+        if (!slot) {
+            alert("해당 출석 시간 슬롯을 찾을 수 없습니다.");
+            return;
+        }
 
         const nowDate = new Date();
         const state = evaluateSlotOpenState(slot, nowDate);
         if (!state.isOpen) {
-            return alert(`현재는 출석 가능 시간이 아닙니다.\n설정 시간: ${formatSlotDaysLabel(slot)} ${slot.startTime} ~ ${slot.endTime}`);
+            alert(`출석 가능 시간이 종료되었거나 출석 대상 요일/시간이 아닙니다.\n(마감 시간: ${slot.endTime})`);
+            return;
         }
 
         const logKey = `${slotId}_${state.occurrenceDateKey}`;
         if (appData.logs && appData.logs[logKey] && appData.logs[logKey][currentUser.id]) {
-            return alert("이미 해당 시간대 출석을 완료했습니다.");
+            alert("이미 해당 시간대 출석을 완료했습니다.");
+            return;
         }
 
         const userGrade = appData.users[currentUser.id].grade;
@@ -742,15 +763,31 @@
         const earnedPoints = Number((baseScore * slot.count * mult).toFixed(2));
         const slotLabel = slot.title ? `${eventTypeLabels[type]}(${slot.title})` : eventTypeLabels[type];
 
+        isSubmittingAttendance = true;
+
+        // 제출 직전 한 번 더 마감 시각 경과 여부 확인
+        const doubleCheck = evaluateSlotOpenState(slot, new Date());
+        if (!doubleCheck.isOpen) {
+            isSubmittingAttendance = false;
+            renderActiveSlots();
+            alert(`출석 가능 시간이 종료되었습니다.\n(마감 시간: ${slot.endTime})`);
+            return;
+        }
+
         db.ref(`logs/${logKey}/${currentUser.id}`).set({
             type,
             slotLabel,
             count: slot.count,
             gradeAtTime: userGrade,
             points: earnedPoints,
-            timestamp: nowDate.getTime()
+            timestamp: firebase.database.ServerValue.TIMESTAMP
         }).then(() => {
+            isSubmittingAttendance = false;
             alert(`${slotLabel} 출석 완료! (${earnedPoints}점 획득)`);
+        }).catch((err) => {
+            isSubmittingAttendance = false;
+            console.error(err);
+            alert("출석 처리 중 오류가 발생했습니다.");
         });
     }
 
@@ -847,7 +884,7 @@
             const badgeEl = document.getElementById(`count-badge-${type}`);
             const entries = Object.entries(appData.schedules[type] || {})
                 .map(([id, data]) => ({ id, ...data }))
-                .sort((a, b) => (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0));
+                .sort((a, b) => (parseTimeToSeconds(a.startTime) || 0) - (parseTimeToSeconds(b.startTime) || 0));
 
             badgeEl.innerText = `${entries.length} / ${MAX_SLOTS_PER_TYPE}`;
             listEl.innerHTML = '';
@@ -971,7 +1008,7 @@
             count,
             gradeAtTime: userGrade,
             points: earnedPoints,
-            timestamp: Date.now(),
+            timestamp: firebase.database.ServerValue.TIMESTAMP,
             isManual: true
         }).then(() => {
             alert(`[${uid}] 유저에게 ${eventTypeLabels[type]} ${count}회 (${earnedPoints}점) 출석이 수동 추가되었습니다.`);
