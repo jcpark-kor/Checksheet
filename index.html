@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>길드 보스 출석 및 분배 대시보드</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Pretendard', sans-serif; }
+        .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; }
+        .input-dark { background-color: #0f172a; border: 1px solid #475569; color: white; border-radius: 0.375rem; padding: 0.5rem 0.75rem; }
+        .input-dark:focus { outline: none; border-color: #3b82f6; }
+        /* 달력/시간 아이콘 다크모드 대응 */
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+<div class="max-w-6xl mx-auto">
+    <!-- 헤더 -->
+    <header class="flex flex-col md:flex-row justify-between items-center mb-8 pb-4 border-b border-slate-700 gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-amber-400">⚔️ 길드 레이드 출석 & 분배 시스템</h1>
+            <p class="text-sm text-slate-400 mt-1">실시간 참여율 집계 및 스펙 가중치 기반 자동 정산</p>
+        </div>
+        <div id="user-info-bar" class="hidden flex items-center gap-3">
+            <span id="logged-in-badge" class="px-3 py-1 bg-slate-800 border border-slate-600 rounded-full text-sm"></span>
+            <button onclick="logout()" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-sm rounded-lg transition">로그아웃</button>
+        </div>
+    </header>
+
+    <!-- 1. 로그인 화면 -->
+    <div id="login-section" class="max-w-md mx-auto card p-6 mt-12 shadow-xl">
+        <h2 class="text-xl font-bold mb-4 text-center">길드원 로그인</h2>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm text-slate-400 mb-1">아이디 (캐릭터명)</label>
+                <input type="text" id="login-id" class="w-full input-dark" placeholder="아이디 입력">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-1">비밀번호</label>
+                <input type="password" id="login-pw" class="w-full input-dark" placeholder="비밀번호 입력" onkeyup="if(event.key==='Enter') login()">
+            </div>
+            <button onclick="login()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 font-semibold rounded-lg transition">로그인</button>
+        </div>
+        <p class="text-xs text-slate-500 mt-4 text-center">초기 관리자 계정: ID <code class="text-amber-400">admin</code> / PW <code class="text-amber-400">1234</code></p>
+    </div>
+
+    <!-- 2. 메인 대시보드 (로그인 후 표시) -->
+    <div id="main-section" class="hidden space-y-6">
+        
+        <!-- 상단 탭 메뉴 -->
+        <div class="flex gap-2 border-b border-slate-700 pb-2 overflow-x-auto">
+            <button onclick="switchTab('attendance')" id="tab-attendance" class="px-4 py-2 rounded-lg font-medium bg-blue-600 text-white">📌 출석체크 & 현황</button>
+            <button onclick="switchTab('history')" id="tab-history" class="px-4 py-2 rounded-lg font-medium text-slate-400 hover:bg-slate-800">📊 과거 Cycle 기록</button>
+            <button onclick="switchTab('admin')" id="tab-admin" class="hidden px-4 py-2 rounded-lg font-medium text-amber-400 hover:bg-slate-800 border border-amber-500/30">⚙️ 관리자 설정</button>
+        </div>
+
+        <!-- [탭 1] 출석체크 및 실시간 순위/분배 대시보드 -->
+        <div id="view-attendance" class="space-y-6">
+            <!-- 유저 출석 체크 패널 (지정 시간 제한 적용) -->
+            <div class="card p-6 border-l-4 border-l-emerald-500">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-emerald-400">현재 진행 중인 출석 이벤트</h3>
+                        <p id="active-event-info" class="text-sm text-slate-300 mt-1">진행 중인 출석이 없습니다.</p>
+                        <p id="active-event-time" class="text-xs text-amber-300 mt-1"></p>
+                    </div>
+                    <div id="check-in-box" class="flex items-center gap-2 w-full md:w-auto">
+                        <button id="check-in-btn" onclick="submitAttendance()" class="w-full md:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg transition whitespace-nowrap">출석 완료</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 분배 시뮬레이터 & Cycle 요약 -->
+            <div class="card p-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                    <div>
+                        <h3 class="text-lg font-bold">🏆 현재 Cycle 누적 점수 & 분배 현황 (<span id="current-cycle-label" class="text-amber-400">Cycle #1</span>)</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">점수 = 콘텐츠 기본점수 × 출석 당시 변신/펫 가중치</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-700">
+                        <span class="text-xs text-slate-400">총 분배 다이아:</span>
+                        <input type="number" id="total-reward-input" value="10000" oninput="renderDashboard()" class="input-dark w-28 text-right text-sm py-1">
+                        <span class="text-xs text-slate-400 ml-2">수수료(%):</span>
+                        <input type="number" id="tax-rate-input" value="8" oninput="renderDashboard()" class="input-dark w-16 text-right text-sm py-1">
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-700 text-slate-400 text-sm">
+                                <th class="py-3 px-4">순위</th>
+                                <th class="py-3 px-4">유저 ID</th>
+                                <th class="py-3 px-4">현재 등급 (변신/펫)</th>
+                                <th class="py-3 px-4">참여 상세 (필드/월드/단체)</th>
+                                <th class="py-3 px-4 text-right">누적 점수</th>
+                                <th class="py-3 px-4 text-right">지분율</th>
+                                <th class="py-3 px-4 text-right text-amber-400">예상 실수령액</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scoreboard-body" class="divide-y divide-slate-800 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- [탭 2] 과거 Cycle 기록 조회 -->
+        <div id="view-history" class="hidden space-y-6">
+            <div class="card p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">📜 종료된 Cycle 히스토리</h3>
+                    <select id="history-cycle-select" onchange="renderHistory()" class="input-dark text-sm">
+                        <option value="">과거 기록 선택</option>
+                    </select>
+                </div>
+                <div id="history-content" class="overflow-x-auto">
+                    <p class="text-slate-400 text-sm py-8 text-center">조회할 과거 Cycle을 선택해주세요.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- [탭 3] 관리자 설정 패널 (Admin 전용) -->
+        <div id="view-admin" class="hidden space-y-6">
+            
+            <!-- 1. 출석 이벤트 오픈(시간 지정) & Cycle 종료 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="card p-6">
+                    <h3 class="text-lg font-bold text-emerald-400 mb-4">1. 출석 체크 오픈 (출석 가능 시간 설정)</h3>
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1">콘텐츠 종류</label>
+                                <select id="admin-event-type" class="w-full input-dark text-sm">
+                                    <option value="field">필드보스</option>
+                                    <option value="world">월드보스</option>
+                                    <option value="war">단체전투</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1">인정 횟수</label>
+                                <input type="number" id="admin-event-count" value="1" min="1" class="w-full input-dark text-sm">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1">출석 시작 시간</label>
+                                <input type="datetime-local" id="admin-event-start" class="w-full input-dark text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1">출석 마감 시간</label>
+                                <input type="datetime-local" id="admin-event-end" class="w-full input-dark text-xs">
+                            </div>
+                        </div>
+                        <button onclick="openAttendanceEvent()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 font-bold rounded-lg transition">지정 시간으로 출석 오픈</button>
+                    </div>
+                </div>
+
+                <div class="card p-6 flex flex-col justify-between border-amber-500/40">
+                    <div>
+                        <h3 class="text-lg font-bold text-amber-400 mb-2">2. 현재 Cycle 정산 및 종료</h3>
+                        <p class="text-sm text-slate-400 mb-4">종료를 누르면 현재까지의 모든 유저 점수가 과거 기록(History)으로 영구 저장되며, 현재 누적 점수는 0점으로 초기화됩니다.</p>
+                    </div>
+                    <button onclick="endCurrentCycle()" class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition">⚠️ 현재 Cycle 종료 및 데이터 아카이빙</button>
+                </div>
+            </div>
+
+            <!-- 2. 관리자 수동 출석 추가 / 삭제 (시간 무관) -->
+            <div class="card p-6 border-l-4 border-l-cyan-500">
+                <h3 class="text-lg font-bold text-cyan-400 mb-1">3. 유저별 출석 기록 수동 추가 / 삭제 (시간 무관)</h3>
+                <p class="text-xs text-slate-400 mb-4">출석 시간이 지났더라도 관리자는 특정 유저의 참여 내역을 직접 추가하거나 잘못된 기록을 삭제할 수 있습니다.</p>
+                
+                <!-- 수동 추가 폼 -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6 bg-slate-900 p-4 rounded-lg">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">대상 유저</label>
+                        <select id="manual-user-select" class="w-full input-dark text-sm"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">콘텐츠 종류</label>
+                        <select id="manual-event-type" class="w-full input-dark text-sm">
+                            <option value="field">필드보스</option>
+                            <option value="world">월드보스</option>
+                            <option value="war">단체전투</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">인정 횟수</label>
+                        <input type="number" id="manual-event-count" value="1" min="1" class="w-full input-dark text-sm">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="manualAddAttendance()" class="w-full py-2 bg-cyan-600 hover:bg-cyan-700 font-bold rounded-lg transition text-sm">+ 출석 수동 추가</button>
+                    </div>
+                </div>
+
+                <!-- 현재 Cycle 전체 출석 로그 (개별 삭제 가능) -->
+                <h4 class="text-sm font-semibold text-slate-300 mb-2">현재 Cycle 출석 상세 로그 (최신순)</h4>
+                <div class="max-h-64 overflow-y-auto border border-slate-700 rounded-lg">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-900 text-slate-400 sticky top-0">
+                            <tr>
+                                <th class="py-2 px-3">일시</th>
+                                <th class="py-2 px-3">유저 ID</th>
+                                <th class="py-2 px-3">콘텐츠 (횟수)</th>
+                                <th class="py-2 px-3">적용 등급</th>
+                                <th class="py-2 px-3 text-right">획득 점수</th>
+                                <th class="py-2 px-3 text-right">삭제</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-logs-list" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 3. 점수 및 가중치 비율 설정 -->
+            <div class="card p-6">
+                <h3 class="text-lg font-bold text-blue-400 mb-4">4. 콘텐츠 기여 점수 & 스펙 가중치 설정</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-3 bg-slate-900 p-4 rounded-lg">
+                        <h4 class="font-semibold text-sm text-slate-300">콘텐츠 1회당 기본 점수 (기여 비중)</h4>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm">필드보스</span>
+                            <input type="number" id="cfg-score-field" class="input-dark w-24 text-right">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm">월드보스</span>
+                            <input type="number" id="cfg-score-world" class="input-dark w-24 text-right">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm">단체전투</span>
+                            <input type="number" id="cfg-score-war" class="input-dark w-24 text-right">
+                        </div>
+                    </div>
+
+                    <div class="space-y-3 bg-slate-900 p-4 rounded-lg">
+                        <h4 class="font-semibold text-sm text-slate-300">변신/펫 등급별 가중치 배율 (예: 1.2 = 20% 추가)</h4>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-amber-400">전설 / 전설</span>
+                            <input type="number" step="0.05" id="cfg-mult-LL" class="input-dark w-24 text-right">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-purple-400">전설 / 영웅 &amp; 영웅 / 전설</span>
+                            <input type="number" step="0.05" id="cfg-mult-LH_HL" class="input-dark w-24 text-right">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-slate-400">영웅 / 영웅</span>
+                            <input type="number" step="0.05" id="cfg-mult-HH" class="input-dark w-24 text-right">
+                        </div>
+                    </div>
+                </div>
+                <button onclick="saveSettings()" class="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 font-semibold rounded-lg transition">설정 저장하기</button>
+            </div>
+
+            <!-- 4. 유저 계정 생성 및 등급 관리 -->
+            <div class="card p-6">
+                <h3 class="text-lg font-bold text-purple-400 mb-4">5. 유저 계정 생성 및 관리</h3>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6 bg-slate-900 p-4 rounded-lg">
+                    <input type="text" id="new-user-id" class="input-dark" placeholder="새 아이디">
+                    <input type="text" id="new-user-pw" class="input-dark" placeholder="비밀번호">
+                    <select id="new-user-grade" class="input-dark">
+                        <option value="LL">전설 / 전설</option>
+                        <option value="LH">전설 / 영웅</option>
+                        <option value="HL">영웅 / 전설</option>
+                        <option value="HH" selected>영웅 / 영웅</option>
+                    </select>
+                    <select id="new-user-role" class="input-dark">
+                        <option value="user">일반 길드원</option>
+                        <option value="admin">관리자 (Admin)</option>
+                    </select>
+                    <button onclick="createUser()" class="bg-purple-600 hover:bg-purple-700 font-bold rounded-lg py-2 transition">계정 생성</button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-700 text-slate-400">
+                                <th class="py-2 px-3">아이디</th>
+                                <th class="py-2 px-3">비밀번호</th>
+                                <th class="py-2 px-3">권한</th>
+                                <th class="py-2 px-3">등급 변경 (즉시 반영)</th>
+                                <th class="py-2 px-3 text-right">관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-user-list" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // =========================================================================
+    // [필수 설정] Firebase 콘솔에서 복사한 본인의 databaseURL을 아래에 입력하세요!
+    // =========================================================================
+    const firebaseConfig = {
+        databaseURL: "https://YOUR-PROJECT-ID-default-rtdb.asia-southeast1.firebasedatabase.app"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentUser = null;
+    let timeCheckInterval = null;
+    let appData = {
+        users: {},
+        settings: {
+            scores: { field: 10, world: 20, war: 30 },
+            multipliers: { LL: 1.3, LH_HL: 1.2, HH: 1.0 }
+        },
+        activeEvent: null,
+        currentCycle: 1,
+        logs: {},
+        history: {}
+    };
+
+    const gradeLabels = {
+        LL: "전설 / 전설",
+        LH: "전설 / 영웅",
+        HL: "영웅 / 전설",
+        HH: "영웅 / 영웅"
+    };
+
+    const eventTypeLabels = {
+        field: "필드보스",
+        world: "월드보스",
+        war: "단체전투"
+    };
+
+    function getGradeMultiplier(grade) {
+        const mults = appData.settings.multipliers || {};
+        if (grade === 'LL') return Number(mults.LL ?? 1.3);
+        if (grade === 'LH' || grade === 'HL') return Number(mults.LH_HL ?? mults.LH ?? mults.HL ?? 1.2);
+        return Number(mults.HH ?? 1.0);
+    }
+
+    // datetime-local 입력용 포맷 변환 헬퍼
+    function toLocalDatetimeInputString(date) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function formatDisplayTime(ts) {
+        if (!ts) return '-';
+        const d = new Date(ts);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // 최초 실행 시 기본 admin 계정 생성
+    db.ref('/').once('value', (snapshot) => {
+        if (!snapshot.exists()) {
+            db.ref('/').set({
+                users: {
+                    admin: { pw: "1234", grade: "LL", role: "admin" }
+                },
+                settings: appData.settings,
+                currentCycle: 1
+            });
+        }
+    });
+
+    // 실시간 데이터 리스너
+    db.ref('/').on('value', (snapshot) => {
+        const val = snapshot.val();
+        if (val) {
+            appData.users = val.users || {};
+            appData.settings = val.settings || appData.settings;
+            appData.activeEvent = val.activeEvent || null;
+            appData.currentCycle = val.currentCycle || 1;
+            appData.logs = val.logs || {};
+            appData.history = val.history || {};
+
+            if (currentUser) {
+                renderAll();
+            }
+        }
+    });
+
+    function login() {
+        const id = document.getElementById('login-id').value.trim();
+        const pw = document.getElementById('login-pw').value.trim();
+
+        if (!appData.users[id]) return alert("존재하지 않는 아이디입니다.");
+        if (appData.users[id].pw !== pw) return alert("비밀번호가 일치하지 않습니다.");
+
+        currentUser = { id, ...appData.users[id] };
+        document.getElementById('login-section').classList.add('hidden');
+        document.getElementById('main-section').classList.remove('hidden');
+        document.getElementById('user-info-bar').classList.remove('hidden');
+        document.getElementById('logged-in-badge').innerText = `${id} (${gradeLabels[currentUser.grade]})`;
+
+        if (currentUser.role === 'admin') {
+            document.getElementById('tab-admin').classList.remove('hidden');
+            setDefaultEventTimes();
+        } else {
+            document.getElementById('tab-admin').classList.add('hidden');
+        }
+
+        // 5초마다 출석 시간 만료 여부를 실시간 갱신
+        if (timeCheckInterval) clearInterval(timeCheckInterval);
+        timeCheckInterval = setInterval(() => {
+            if (currentUser) renderActiveEvent();
+        }, 5000);
+
+        renderAll();
+    }
+
+    function logout() {
+        currentUser = null;
+        if (timeCheckInterval) clearInterval(timeCheckInterval);
+        document.getElementById('login-section').classList.remove('hidden');
+        document.getElementById('main-section').classList.add('hidden');
+        document.getElementById('user-info-bar').classList.add('hidden');
+        document.getElementById('login-pw').value = '';
+    }
+
+    function switchTab(tabName) {
+        ['attendance', 'history', 'admin'].forEach(t => {
+            document.getElementById(`view-${t}`).classList.add('hidden');
+            document.getElementById(`tab-${t}`).classList.remove('bg-blue-600', 'text-white');
+            document.getElementById(`tab-${t}`).classList.add('text-slate-400');
+        });
+        document.getElementById(`view-${tabName}`).classList.remove('hidden');
+        document.getElementById(`tab-${tabName}`).classList.add('bg-blue-600', 'text-white');
+        document.getElementById(`tab-${tabName}`).classList.remove('text-slate-400');
+    }
+
+    function renderAll() {
+        if (appData.users[currentUser.id]) {
+            currentUser.grade = appData.users[currentUser.id].grade;
+            currentUser.role = appData.users[currentUser.id].role;
+            document.getElementById('logged-in-badge').innerText = `${currentUser.id} (${gradeLabels[currentUser.grade]})`;
+        }
+        renderActiveEvent();
+        renderDashboard();
+        renderHistoryOptions();
+        if (currentUser.role === 'admin') {
+            renderAdminPanel();
+        }
+    }
+
+    // 현재 진행 중인 출석 이벤트 및 지정 시간 체크
+    function renderActiveEvent() {
+        const infoEl = document.getElementById('active-event-info');
+        const timeEl = document.getElementById('active-event-time');
+        const boxEl = document.getElementById('check-in-box');
+        const btnEl = document.getElementById('check-in-btn');
+        const ev = appData.activeEvent;
+
+        if (!ev) {
+            infoEl.innerHTML = "현재 열려있는 출석체크가 없습니다. 관리자의 오픈을 기다려주세요.";
+            timeEl.innerText = "";
+            boxEl.classList.add('opacity-50', 'pointer-events-none');
+            btnEl.innerText = "출석 대기중";
+            return;
+        }
+
+        const now = Date.now();
+        const startTime = ev.startTime || 0;
+        const endTime = ev.endTime || Infinity;
+        const alreadyChecked = appData.logs && appData.logs[ev.id] && appData.logs[ev.id][currentUser.id];
+
+        infoEl.innerHTML = `진행중: <strong class="text-white">${eventTypeLabels[ev.type]} (${ev.count}회 인정)</strong>`;
+        timeEl.innerText = `⏰ 출석 가능 시간: ${formatDisplayTime(startTime)} ~ ${formatDisplayTime(endTime)}`;
+
+        if (alreadyChecked) {
+            boxEl.classList.add('opacity-50', 'pointer-events-none');
+            btnEl.innerText = "출석 완료됨";
+        } else if (now < startTime) {
+            boxEl.classList.add('opacity-50', 'pointer-events-none');
+            btnEl.innerText = "출석 시작 전";
+        } else if (now > endTime) {
+            boxEl.classList.add('opacity-50', 'pointer-events-none');
+            btnEl.innerText = "출석 시간 마감";
+        } else {
+            boxEl.classList.remove('opacity-50', 'pointer-events-none');
+            btnEl.innerText = "출석 완료";
+        }
+    }
+
+    // 유저 원클릭 출석 제출 (지정 시간 검증 포함)
+    function submitAttendance() {
+        const ev = appData.activeEvent;
+        if (!ev) return alert("진행 중인 출석 이벤트가 없습니다.");
+
+        const now = Date.now();
+        if (ev.startTime && now < ev.startTime) {
+            return alert(`아직 출석 가능 시간이 아닙니다.\n(시작 시간: ${formatDisplayTime(ev.startTime)})`);
+        }
+        if (ev.endTime && now > ev.endTime) {
+            return alert(`출석 가능 시간이 종료되었습니다.\n(마감 시간: ${formatDisplayTime(ev.endTime)})\n누락된 경우 관리자에게 문의하세요.`);
+        }
+
+        if (appData.logs && appData.logs[ev.id] && appData.logs[ev.id][currentUser.id]) {
+            return alert("이미 출석체크를 완료했습니다.");
+        }
+
+        const userGrade = appData.users[currentUser.id].grade;
+        const baseScore = Number(appData.settings.scores[ev.type]);
+        const mult = getGradeMultiplier(userGrade);
+        const earnedPoints = Number((baseScore * ev.count * mult).toFixed(2));
+
+        db.ref(`logs/${ev.id}/${currentUser.id}`).set({
+            type: ev.type,
+            count: ev.count,
+            gradeAtTime: userGrade,
+            points: earnedPoints,
+            timestamp: now
+        }).then(() => {
+            alert(`출석 완료! (${earnedPoints}점 획득)`);
+        });
+    }
+
+    // 대시보드 순위 및 분배금 계산 렌더링
+    function renderDashboard() {
+        document.getElementById('current-cycle-label').innerText = `Cycle #${appData.currentCycle}`;
+        const tbody = document.getElementById('scoreboard-body');
+        tbody.innerHTML = '';
+
+        const totalReward = Number(document.getElementById('total-reward-input').value) || 0;
+        const taxRate = Number(document.getElementById('tax-rate-input').value) || 0;
+        const netReward = totalReward * (1 - taxRate / 100);
+
+        const summary = {};
+        Object.keys(appData.users).forEach(uid => {
+            summary[uid] = {
+                id: uid,
+                grade: appData.users[uid].grade,
+                field: 0, world: 0, war: 0,
+                totalPoints: 0
+            };
+        });
+
+        let grandTotalPoints = 0;
+
+        Object.values(appData.logs).forEach(eventLogs => {
+            Object.entries(eventLogs).forEach(([uid, record]) => {
+                if (summary[uid]) {
+                    summary[uid][record.type] += record.count;
+                    summary[uid].totalPoints += record.points;
+                    grandTotalPoints += record.points;
+                }
+            });
+        });
+
+        const sortedUsers = Object.values(summary).sort((a, b) => b.totalPoints - a.totalPoints);
+
+        sortedUsers.forEach((u, idx) => {
+            const share = grandTotalPoints > 0 ? (u.totalPoints / grandTotalPoints) : 0;
+            const myReward = Math.floor(netReward * share);
+
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-800/50 transition";
+            tr.innerHTML = `
+                <td class="py-3 px-4 font-bold ${idx < 3 ? 'text-amber-400' : 'text-slate-400'}">${idx + 1}</td>
+                <td class="py-3 px-4 font-semibold">${u.id}</td>
+                <td class="py-3 px-4 text-xs"><span class="px-2 py-1 bg-slate-800 rounded border border-slate-600">${gradeLabels[u.grade]}</span></td>
+                <td class="py-3 px-4 text-slate-300 text-xs">필드 ${u.field} / 월드 ${u.world} / 단체 ${u.war}</td>
+                <td class="py-3 px-4 text-right font-bold text-emerald-400">${u.totalPoints.toFixed(1)} 점</td>
+                <td class="py-3 px-4 text-right text-slate-300">${(share * 100).toFixed(1)}%</td>
+                <td class="py-3 px-4 text-right font-bold text-amber-400">${myReward.toLocaleString()}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // =========================================================================
+    // 관리자(Admin) 기능 함수들
+    // =========================================================================
+    function setDefaultEventTimes() {
+        const now = new Date();
+        const thirtyMinsLater = new Date(now.getTime() + 30 * 60000);
+        document.getElementById('admin-event-start').value = toLocalDatetimeInputString(now);
+        document.getElementById('admin-event-end').value = toLocalDatetimeInputString(thirtyMinsLater);
+    }
+
+    function renderAdminPanel() {
+        document.getElementById('cfg-score-field').value = appData.settings.scores.field;
+        document.getElementById('cfg-score-world').value = appData.settings.scores.world;
+        document.getElementById('cfg-score-war').value = appData.settings.scores.war;
+
+        const mults = appData.settings.multipliers || {};
+        document.getElementById('cfg-mult-LL').value = mults.LL ?? 1.3;
+        document.getElementById('cfg-mult-LH_HL').value = mults.LH_HL ?? mults.LH ?? mults.HL ?? 1.2;
+        document.getElementById('cfg-mult-HH').value = mults.HH ?? 1.0;
+
+        // 수동 출석 추가용 유저 드롭다운 갱신
+        const manualSelect = document.getElementById('manual-user-select');
+        const prevSelected = manualSelect.value;
+        manualSelect.innerHTML = '';
+        Object.keys(appData.users).forEach(uid => {
+            const opt = document.createElement('option');
+            opt.value = uid;
+            opt.innerText = `${uid} (${gradeLabels[appData.users[uid].grade]})`;
+            manualSelect.appendChild(opt);
+        });
+        if (prevSelected && appData.users[prevSelected]) manualSelect.value = prevSelected;
+
+        // 현재 Cycle 상세 출석 로그 렌더링 (개별 삭제용)
+        const logsListEl = document.getElementById('admin-logs-list');
+        logsListEl.innerHTML = '';
+        const flatLogs = [];
+        Object.entries(appData.logs).forEach(([evId, userRecords]) => {
+            Object.entries(userRecords).forEach(([uid, rec]) => {
+                flatLogs.push({ evId, uid, ...rec });
+            });
+        });
+        flatLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        if (flatLogs.length === 0) {
+            logsListEl.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-500">현재 Cycle에 기록된 출석 내역이 없습니다.</td></tr>';
+        } else {
+            flatLogs.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/50";
+                tr.innerHTML = `
+                    <td class="py-2 px-3 text-slate-400">${formatDisplayTime(item.timestamp)} ${item.isManual ? '<span class="text-cyan-400">[수동]</span>' : ''}</td>
+                    <td class="py-2 px-3 font-semibold">${item.uid}</td>
+                    <td class="py-2 px-3">${eventTypeLabels[item.type]} (${item.count}회)</td>
+                    <td class="py-2 px-3 text-slate-400">${gradeLabels[item.gradeAtTime] || '-'}</td>
+                    <td class="py-2 px-3 text-right font-bold text-emerald-400">+${item.points}</td>
+                    <td class="py-2 px-3 text-right">
+                        <button onclick="deleteAttendanceLog('${item.evId}', '${item.uid}')" class="px-2 py-0.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded">삭제</button>
+                    </td>
+                `;
+                logsListEl.appendChild(tr);
+            });
+        }
+
+        // 유저 목록 렌더링
+        const userListEl = document.getElementById('admin-user-list');
+        userListEl.innerHTML = '';
+
+        Object.entries(appData.users).forEach(([uid, u]) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="py-2.5 px-3 font-semibold">${uid}</td>
+                <td class="py-2.5 px-3 text-slate-400">${u.pw}</td>
+                <td class="py-2.5 px-3 text-xs">${u.role === 'admin' ? '<span class="text-amber-400">Admin</span>' : 'User'}</td>
+                <td class="py-2.5 px-3">
+                    <select onchange="updateUserGrade('${uid}', this.value)" class="input-dark text-xs py-1">
+                        <option value="LL" ${u.grade==='LL'?'selected':''}>전설 / 전설</option>
+                        <option value="LH" ${u.grade==='LH'?'selected':''}>전설 / 영웅</option>
+                        <option value="HL" ${u.grade==='HL'?'selected':''}>영웅 / 전설</option>
+                        <option value="HH" ${u.grade==='HH'?'selected':''}>영웅 / 영웅</option>
+                    </select>
+                </td>
+                <td class="py-2.5 px-3 text-right">
+                    ${uid !== 'admin' ? `<button onclick="deleteUser('${uid}')" class="text-rose-400 hover:underline text-xs">삭제</button>` : '-'}
+                </td>
+            `;
+            userListEl.appendChild(tr);
+        });
+    }
+
+    function openAttendanceEvent() {
+        const type = document.getElementById('admin-event-type').value;
+        const count = Number(document.getElementById('admin-event-count').value) || 1;
+        const startVal = document.getElementById('admin-event-start').value;
+        const endVal = document.getElementById('admin-event-end').value;
+
+        if (!startVal || !endVal) return alert("출석 시작 시간과 마감 시간을 모두 설정해주세요.");
+
+        const startTime = new Date(startVal).getTime();
+        const endTime = new Date(endVal).getTime();
+
+        if (endTime <= startTime) {
+            return alert("마감 시간은 시작 시간보다 이후여야 합니다.");
+        }
+
+        const eventId = `ev_${Date.now()}`;
+
+        db.ref('activeEvent').set({
+            id: eventId,
+            type,
+            count,
+            startTime,
+            endTime,
+            createdAt: Date.now()
+        }).then(() => {
+            alert(`${eventTypeLabels[type]} (${count}회) 출석체크가 오픈되었습니다.\n가능 시간: ${formatDisplayTime(startTime)} ~ ${formatDisplayTime(endTime)}`);
+        });
+    }
+
+    // 관리자 전용: 시간 무관 유저 출석 수동 추가
+    function manualAddAttendance() {
+        const uid = document.getElementById('manual-user-select').value;
+        const type = document.getElementById('manual-event-type').value;
+        const count = Number(document.getElementById('manual-event-count').value) || 1;
+
+        if (!uid || !appData.users[uid]) return alert("대상 유저를 선택하세요.");
+
+        const userGrade = appData.users[uid].grade;
+        const baseScore = Number(appData.settings.scores[type]);
+        const mult = getGradeMultiplier(userGrade);
+        const earnedPoints = Number((baseScore * count * mult).toFixed(2));
+        const manualEventId = `manual_${Date.now()}`;
+
+        db.ref(`logs/${manualEventId}/${uid}`).set({
+            type,
+            count,
+            gradeAtTime: userGrade,
+            points: earnedPoints,
+            timestamp: Date.now(),
+            isManual: true
+        }).then(() => {
+            alert(`[${uid}] 유저에게 ${eventTypeLabels[type]} ${count}회 (${earnedPoints}점) 출석이 수동 추가되었습니다.`);
+        });
+    }
+
+    // 관리자 전용: 특정 유저의 출석 기록 삭제
+    function deleteAttendanceLog(evId, uid) {
+        if (confirm(`[${uid}] 유저의 해당 출석 기록을 삭제하시겠습니까?\n삭제 시 누적 점수에서 즉시 차감됩니다.`)) {
+            db.ref(`logs/${evId}/${uid}`).remove();
+        }
+    }
+
+    function saveSettings() {
+        const lhHlVal = Number(document.getElementById('cfg-mult-LH_HL').value);
+        const newSettings = {
+            scores: {
+                field: Number(document.getElementById('cfg-score-field').value),
+                world: Number(document.getElementById('cfg-score-world').value),
+                war: Number(document.getElementById('cfg-score-war').value)
+            },
+            multipliers: {
+                LL: Number(document.getElementById('cfg-mult-LL').value),
+                LH_HL: lhHlVal,
+                LH: lhHlVal,
+                HL: lhHlVal,
+                HH: Number(document.getElementById('cfg-mult-HH').value)
+            }
+        };
+        db.ref('settings').set(newSettings).then(() => alert("점수 및 가중치 설정이 저장되었습니다."));
+    }
+
+    function createUser() {
+        const id = document.getElementById('new-user-id').value.trim();
+        const pw = document.getElementById('new-user-pw').value.trim();
+        const grade = document.getElementById('new-user-grade').value;
+        const role = document.getElementById('new-user-role').value;
+
+        if (!id || !pw) return alert("아이디와 비밀번호를 모두 입력하세요.");
+        if (appData.users[id]) return alert("이미 존재하는 아이디입니다.");
+
+        db.ref(`users/${id}`).set({ pw, grade, role }).then(() => {
+            document.getElementById('new-user-id').value = '';
+            document.getElementById('new-user-pw').value = '';
+            alert(`${id} 계정이 생성되었습니다.`);
+        });
+    }
+
+    function updateUserGrade(uid, newGrade) {
+        db.ref(`users/${uid}/grade`).set(newGrade);
+    }
+
+    function deleteUser(uid) {
+        if (confirm(`정말 '${uid}' 계정을 삭제하시겠습니까?`)) {
+            db.ref(`users/${uid}`).remove();
+        }
+    }
+
+    function endCurrentCycle() {
+        if (!confirm(`현재 Cycle #${appData.currentCycle}을 종료하시겠습니까?\n종료 시 현재 점수는 과거 기록으로 저장되고 0점으로 초기화됩니다.`)) return;
+
+        const snapshotData = {};
+        Object.keys(appData.users).forEach(uid => {
+            snapshotData[uid] = { grade: appData.users[uid].grade, field: 0, world: 0, war: 0, totalPoints: 0 };
+        });
+
+        Object.values(appData.logs).forEach(eventLogs => {
+            Object.entries(eventLogs).forEach(([uid, rec]) => {
+                if (snapshotData[uid]) {
+                    snapshotData[uid][rec.type] += rec.count;
+                    snapshotData[uid].totalPoints += rec.points;
+                }
+            });
+        });
+
+        const cycleKey = `cycle_${appData.currentCycle}`;
+        const updates = {};
+        updates[`history/${cycleKey}`] = {
+            cycleNumber: appData.currentCycle,
+            endedAt: new Date().toLocaleString('ko-KR'),
+            results: snapshotData
+        };
+        updates['logs'] = null;
+        updates['activeEvent'] = null;
+        updates['currentCycle'] = appData.currentCycle + 1;
+
+        db.ref().update(updates).then(() => {
+            alert(`Cycle #${appData.currentCycle - 1} 정산이 완료되어 과거 기록에 저장되었습니다.`);
+        });
+    }
+
+    function renderHistoryOptions() {
+        const select = document.getElementById('history-cycle-select');
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">과거 기록 선택</option>';
+
+        Object.entries(appData.history).forEach(([key, data]) => {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.innerText = `Cycle #${data.cycleNumber} (종료일: ${data.endedAt})`;
+            select.appendChild(opt);
+        });
+        select.value = currentVal;
+    }
+
+    function renderHistory() {
+        const key = document.getElementById('history-cycle-select').value;
+        const container = document.getElementById('history-content');
+        if (!key || !appData.history[key]) {
+            container.innerHTML = '<p class="text-slate-400 text-sm py-8 text-center">조회할 과거 Cycle을 선택해주세요.</p>';
+            return;
+        }
+
+        const results = Object.entries(appData.history[key].results || {})
+            .map(([uid, val]) => ({ id: uid, ...val }))
+            .sort((a, b) => b.totalPoints - a.totalPoints);
+
+        let html = `
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b border-slate-700 text-slate-400">
+                        <th class="py-2 px-4">순위</th>
+                        <th class="py-2 px-4">유저 ID</th>
+                        <th class="py-2 px-4">종료 시점 등급</th>
+                        <th class="py-2 px-4">참여 내역</th>
+                        <th class="py-2 px-4 text-right">최종 확정 점수</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+        `;
+
+        results.forEach((u, i) => {
+            html += `
+                <tr>
+                    <td class="py-2.5 px-4 font-bold text-slate-400">${i + 1}</td>
+                    <td class="py-2.5 px-4 font-semibold">${u.id}</td>
+                    <td class="py-2.5 px-4 text-xs">${gradeLabels[u.grade] || '-'}</td>
+                    <td class="py-2.5 px-4 text-xs text-slate-400">필드 ${u.field} / 월드 ${u.world} / 단체 ${u.war}</td>
+                    <td class="py-2.5 px-4 text-right font-bold text-amber-400">${u.totalPoints.toFixed(1)} 점</td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+</script>
+</body>
+</html>
